@@ -1,0 +1,14 @@
+*.*
+out
+
+!.gitignore
+!Readme.md
+!include/**/*[.hpp, .h]
+
+# folders
+!Triangle/**/*[.cppm, .ixx, .cpp, .cxx, .hpp, .h]
+!TestImTerm/**/*[.cppm, .ixx, .cpp, .cxx, .hpp, .h]
+
+!**/CMakeLists.txt
+!CMakePresets.json
+!vcpkg.json

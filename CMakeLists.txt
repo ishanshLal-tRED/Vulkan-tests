@@ -1,0 +1,17 @@
+cmake_minimum_required(VERSION 3.21) # C++ 20
+
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+if(DEFINED ENV{VCPKG_DIR} AND NOT DEFINED CMAKE_TOOLCHAIN_FILE)
+    set(CMAKE_TOOLCHAIN_FILE  "$ENV{VCPKG_DIR}/scripts/buildsystems/vcpkg.cmake" CACHE STRING "")
+endif()
+
+project("ThisProject")
+
+message("||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||")
+message("||||||||||||||||||||||| THIS IS ${CMAKE_CXX_COMPILER_ID} \tCOMPILER ||||||||||||||||||||||")
+message("||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||")
+
+add_subdirectory(Triangle)
+add_subdirectory(TestImTerm)
