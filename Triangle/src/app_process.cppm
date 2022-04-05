@@ -18,6 +18,11 @@ void Application::Setup (const std::span<char*> &argument_list, Context& current
 	
 	glfwInit();
 	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+	glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+
+	if (current_context.MainWindow == nullptr){
+		current_context.MainWindow = glfwCreateWindow(current_context.WIDTH, current_context.HEIGHT, "Vulkan window", nullptr, nullptr);
+	}
 	
 	glm::mat4 matrix;
     glm::vec4 vec;
@@ -26,13 +31,19 @@ void Application::Setup (const std::span<char*> &argument_list, Context& current
 
 bool Application::WindowsShouldClose (const Context& current_context) {
 	std::this_thread::sleep_for(std::chrono::milliseconds(50));
-	return (val-- ? false : true);
+	return glfwWindowShouldClose(current_context.MainWindow);
 }
 
 void Application::Update (double latency) {
 	std::cout << __FUNCSIG__ << ' ' << latency << std::endl;
+
+	glfwPollEvents ();
 }
 
 void Application::Cleanup (Context& the_context) {
 	std::cout << __FUNCSIG__ << std::endl;
+
+	glfwDestroyWindow(the_context.MainWindow);
+
+    glfwTerminate();
 }

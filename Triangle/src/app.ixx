@@ -3,11 +3,16 @@ module;
 export import <span>;
 import <time.h>;
 
+
+import <vulkan\vulkan.h>;
+#define GLFW_INCLUDE_VULKAN
+#include <GLFW/glfw3.h>
+
 export module MainApplication;
 
 namespace Application
 {
-	export class Context {
+	export struct Context {
 		public:
 			void UpdateTime() {
 				clock_t time_now = clock();
@@ -15,12 +20,16 @@ namespace Application
 				frame_timestamp = time_now;
 			}
 		public:
+			const int WIDTH = 800, HEIGHT = 600;
 			double UpdateLatency   = 0.0;
 			double RenderLatency   = 0.0;
+			
+			GLFWwindow* MainWindow = nullptr;
+			VkInstance MainVkInstance;
 		private:
 			clock_t frame_timestamp = clock();
 	};
-	static Context g_context;
+	Context g_context{};
 
 	export {
 		const Context*	GetContext		() { return &g_context; }
