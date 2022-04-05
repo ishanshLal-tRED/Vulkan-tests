@@ -14,8 +14,13 @@ static constexpr std::array<const char*, 1> s_ValidationLayers = {
 };
 constexpr bool g_EnableValidationLayers = ( _DEBUG ? true : false );
 
-void Application::InitializeVk (Context& current_context) { 
+VKAPI_ATTR VkBool32 VKAPI_CALL vk_debug_callback(
+	VkDebugUtilsMessageSeverityFlagBitsEXT,VkDebugUtilsMessageTypeFlagsEXT,
+	const VkDebugUtilsMessengerCallbackDataEXT*,void*);
+
+void Application::InitializeVk (Context& current_context) {
 	LOG_trace(__FUNCSIG__); 
+
 	VkApplicationInfo app_info {
 		.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
 		.pApplicationName = "Hello Triangle",
@@ -77,8 +82,17 @@ void Application::InitializeVk (Context& current_context) {
 		}
 	}
 
+	VkDebugUtilsMessengerCreateInfoEXT debug_messenger_create_info { // Reusing later when creating debug messenger
+		.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
+		.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT,
+		.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT,
+		.pfnUserCallback = vk_debug_callback,
+		.pUserData = nullptr // Optional
+	};
+
 	VkInstanceCreateInfo create_info{
 		.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
+		.pNext = (g_EnableValidationLayers ? (VkDebugUtilsMessengerCreateInfoEXT*) &debug_messenger_create_info : nullptr),
 		.pApplicationInfo = &app_info,
 		.enabledLayerCount = (g_EnableValidationLayers ? s_ValidationLayers.size () : 0),
 		.ppEnabledLayerNames = (g_EnableValidationLayers ? s_ValidationLayers.data () : nullptr),
@@ -91,52 +105,11 @@ void Application::InitializeVk (Context& current_context) {
 	}
 
 	if (g_EnableValidationLayers) { // Create Debug Utils Messenger
-		VkBool32(VKAPI_ATTR *vk_debug_callback)(
-			VkDebugUtilsMessageSeverityFlagBitsEXT,VkDebugUtilsMessageTypeFlagsEXT,
-			const VkDebugUtilsMessengerCallbackDataEXT*,void*)
-		= [](VkDebugUtilsMessageSeverityFlagBitsEXT message_severity,
-			VkDebugUtilsMessageTypeFlagsEXT message_type,
-			const VkDebugUtilsMessengerCallbackDataEXT* callback_data,
-			void* pUserData) 
-		{
-			std::string msg_type;
-			if (message_type & VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT)
-				msg_type += "VkGeneral";
-			if (!msg_type.empty())
-				msg_type += ", ";
-			if (message_type & VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT)
-				msg_type += "VkPerformance";
-			if (!msg_type.empty())
-				msg_type += ", ";
-			if (message_type & VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT)
-				msg_type += "VkValidation";
 
-			if (message_severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) {
-				LOG_error("{:s}: {:s}", msg_type, callback_data->pMessage); __debugbreak();
-			} else if (message_severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) {
-				LOG_warn("{:s}: {:s}", msg_type, callback_data->pMessage);
-			} else if (message_severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT) {
-				LOG_info("{:s}: {:s}", msg_type, callback_data->pMessage);
-			} else if (message_severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT) {
-				LOG_debug("{:s}: {:s}", msg_type, callback_data->pMessage);
-			} else {
-				LOG_trace("{:s}: {:s}", msg_type, callback_data->pMessage);
-			}
-			return VK_FALSE;
-		};
-		
-		VkDebugUtilsMessengerCreateInfoEXT create_info{
-			.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
-			.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT,
-			.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT,
-			.pfnUserCallback = vk_debug_callback,
-			.pUserData = nullptr // Optional
-		};
-	
 		VkResult result = VK_ERROR_EXTENSION_NOT_PRESENT;
 		auto func = (PFN_vkCreateDebugUtilsMessengerEXT) vkGetInstanceProcAddr(current_context.Vk.MainInstance, "vkCreateDebugUtilsMessengerEXT");
 		if (func != nullptr) {
-		    result = func(current_context.Vk.MainInstance, &create_info, nullptr, &current_context.Vk.DebugMessenger);
+		    result = func(current_context.Vk.MainInstance, &debug_messenger_create_info, nullptr, &current_context.Vk.DebugMessenger);
 		}
 		if (result != VK_SUCCESS){
 			THROW_Critical("failed setting up vk_debug_messenger");
@@ -160,3 +133,38 @@ void Application::TerminateVk (Context& the_context) {
 
 	vkDestroyInstance(the_context.Vk.MainInstance, nullptr);
 }
+
+VKAPI_ATTR VkBool32 VKAPI_CALL vk_debug_callback (VkDebugUtilsMessageSeverityFlagBitsEXT message_severity,
+	VkDebugUtilsMessageTypeFlagsEXT message_type,
+	const VkDebugUtilsMessengerCallbackDataEXT* callback_data,
+	void* pUserData) 
+{
+	std::string msg_type;
+	if (message_type & VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT) {
+		//if (!msg_type.empty())
+		//	msg_type += ", ";
+		msg_type += "VkGeneral";
+	} 
+	if (message_type & VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT) {
+		if (!msg_type.empty())
+			msg_type += ", ";
+		msg_type += "VkPerformance";
+	} 
+	if (message_type & VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT) {
+		if (!msg_type.empty())
+			msg_type += ", ";
+		msg_type += "VkValidation";
+	}
+	if (message_severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) {
+		LOG_error("{:s}: {:s}", msg_type, callback_data->pMessage); __debugbreak();
+	} else if (message_severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) {
+		LOG_warn("{:s}: {:s}", msg_type, callback_data->pMessage);
+	} else if (message_severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT) {
+		LOG_info("{:s}: {:s}", msg_type, callback_data->pMessage);
+	} else if (message_severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT) {
+		LOG_debug("{:s}: {:s}", msg_type, callback_data->pMessage);
+	} else {
+		LOG_trace("{:s}: {:s}", msg_type, callback_data->pMessage);
+	}
+	return VK_FALSE;
+};
