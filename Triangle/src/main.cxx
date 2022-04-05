@@ -1,4 +1,4 @@
-import <iostream>;
+#include <logging.hxx>
 
 import MainApplication;
 
@@ -7,10 +7,10 @@ int main(size_t argc, char* argv[]) {
 	    Application::Setup (std::span<char*>{argv, argc});
     	Application::InitializeVk ();
     	Application::Run ();
-    	Application::TerminateVk ();
-    	Application::Cleanup ();
     } catch (std::exception &e) {
-	    std::cerr << e.what() << std::endl;
+	    LOG_raw ("{:s}", e.what());
         return 1;
     }
+    Application::TerminateVk ();
+    Application::Cleanup ();
 }

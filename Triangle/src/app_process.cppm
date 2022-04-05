@@ -1,8 +1,9 @@
-import MainApplication;
-
-import <iostream>;
+#include <logging.hxx>;
 import <thread>;
 import <chrono>;
+
+import MainApplication;
+
 
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
@@ -14,8 +15,8 @@ import <chrono>;
 
 static int val = 10;
 void Application::Setup (const std::span<char*> &argument_list, Context& current_context) { 
-	std::cout << __FUNCSIG__ << std::endl;
-	
+	LOG_trace(__FUNCSIG__);
+
 	glfwInit();
 	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 	glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
@@ -35,13 +36,13 @@ bool Application::WindowsShouldClose (const Context& current_context) {
 }
 
 void Application::Update (double latency) {
-	std::cout << __FUNCSIG__ << ' ' << latency << std::endl;
+	LOG_trace("{:s} {:f}", __FUNCSIG__, latency);
 
 	glfwPollEvents ();
 }
 
 void Application::Cleanup (Context& the_context) {
-	std::cout << __FUNCSIG__ << std::endl;
+	LOG_trace(__FUNCSIG__);
 
 	glfwDestroyWindow(the_context.MainWindow);
 

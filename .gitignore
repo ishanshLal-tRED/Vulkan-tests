@@ -6,9 +6,11 @@ out
 !include/**/*[.hpp, .h]
 
 # folders
-!Triangle/**/*[.cppm, .ixx, .cpp, .cxx, .hpp, .h]
-!TestImTerm/**/*[.cppm, .ixx, .cpp, .cxx, .hpp, .h]
+!Triangle/**/*[.cppm, .ixx, .cpp, .cxx, .hpp, .hxx, .c, .h]
+!TestImTerm/**/*[.cppm, .ixx, .cpp, .cxx, .hpp, .hxx, .c, .h]
 
 !**/CMakeLists.txt
 !CMakePresets.json
 !vcpkg.json
+
+temp/CMakeLists.txt
