@@ -9,6 +9,8 @@ endif()
 
 project("ThisProject")
 
+add_compile_definitions(PROJECT_ROOT_LOCATION="${CMAKE_SOURCE_DIR}")
+
 message("||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||")
 message("||||||||||||||||||||||| THIS IS ${CMAKE_CXX_COMPILER_ID} \tCOMPILER ||||||||||||||||||||||")
 message("||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||")

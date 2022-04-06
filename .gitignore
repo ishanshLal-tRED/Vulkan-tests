@@ -3,7 +3,7 @@ out
 
 !.gitignore
 !Readme.md
-!include/**/*[.hpp, .h]
+!include/**/*[.hpp, .hxx, .h]
 
 # folders
 !Triangle/**/*[.cppm, .ixx, .cpp, .cxx, .hpp, .hxx, .c, .h]

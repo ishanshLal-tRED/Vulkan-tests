@@ -17,6 +17,7 @@ constexpr bool g_EnableValidationLayers = ( _DEBUG ? true : false );
 VKAPI_ATTR VkBool32 VKAPI_CALL vk_debug_callback(
 	VkDebugUtilsMessageSeverityFlagBitsEXT,VkDebugUtilsMessageTypeFlagsEXT,
 	const VkDebugUtilsMessengerCallbackDataEXT*,void*);
+bool is_vk_device_suitable (VkPhysicalDevice device);
 
 void Application::InitializeVk (Context& current_context) {
 	LOG_trace(__FUNCSIG__); 
@@ -113,9 +114,27 @@ void Application::InitializeVk (Context& current_context) {
 		    result = func(current_context.Vk.MainInstance, &debug_messenger_create_info, nullptr, &current_context.Vk.DebugMessenger);
 		}
 		if (result != VK_SUCCESS){
-			THROW_Critical("failed setting up vk_debug_messenger");
+			THROW_CORE_Critical("failed setting up vk_debug_messenger");
 		}
 	}
+
+	// Phisical device
+	uint32_t device_count = 0;
+	vkEnumeratePhysicalDevices(current_context.Vk.MainInstance, &device_count, nullptr);
+	if (device_count == 0)
+		THROW_CORE_Critical("failed to find hardware with vulkan support");
+	std::vector<VkPhysicalDevice> vk_enabled_devices (device_count);
+	vkEnumeratePhysicalDevices(current_context.Vk.MainInstance, &device_count, vk_enabled_devices.data ());
+	for (auto device: vk_enabled_devices){
+		if (is_vk_device_suitable (device)) {
+			current_context.Vk.PhysicalDevice = device;
+			break;
+		}
+	}
+	
+	if (current_context.Vk.PhysicalDevice == VK_NULL_HANDLE)
+		THROW_CORE_Critical("failed to find hardware with vulkan support");
+	
 }
 
 void Application::Render (double latency) {
@@ -169,3 +188,34 @@ VKAPI_ATTR VkBool32 VKAPI_CALL vk_debug_callback (VkDebugUtilsMessageSeverityFla
 	}
 	return VK_FALSE;
 };
+
+bool is_vk_device_suitable (VkPhysicalDevice device) {
+	// We culd also implement a rating system for selecting most powerful GPU in system
+
+	VkPhysicalDeviceProperties device_properties;
+	VkPhysicalDeviceFeatures device_features;
+
+	vkGetPhysicalDeviceProperties (device, &device_properties);
+	vkGetPhysicalDeviceFeatures (device, &device_features);
+
+	decltype(Application::GetContext()->Vk.QueueFamilyIndices) indices;
+	{ // Find required queue families
+		uint32_t queue_family_count = 0;
+		vkGetPhysicalDeviceQueueFamilyProperties(device, &queue_family_count, nullptr);
+		std::vector<VkQueueFamilyProperties> queue_families(queue_family_count);
+		vkGetPhysicalDeviceQueueFamilyProperties(device, &queue_family_count, queue_families.data());
+		for (int i = 0; auto &queue_family: queue_families) {
+			if (queue_family.queueFlags & VK_QUEUE_GRAPHICS_BIT)
+				indices.GraphicsFamily = i;
+			if (indices.AreAllFamiliesPresent()) break;
+			++i;
+		}
+	}
+
+	LOG_info("Testing device for suitability: {:s}", device_properties.deviceName);
+	return true
+		&&	device_properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU
+		&&	device_features.geometryShader
+		&&	indices.AreAllFamiliesPresent()
+	;
+}
