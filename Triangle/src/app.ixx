@@ -28,17 +28,11 @@ namespace Application
 			
 			GLFWwindow* MainWindow = nullptr;
 			
-			struct /*struct_Vk*/ {
+			struct struct_Vk {
 				VkInstance MainInstance;
 				VkDebugUtilsMessengerEXT DebugMessenger;
 				VkPhysicalDevice PhysicalDevice = VK_NULL_HANDLE;
-				struct /*struct_QueueFamilyIndices*/ {
-					std::optional<uint32_t> GraphicsFamily;
-					inline bool AreAllFamiliesPresent() {
-						return true 
-							&& GraphicsFamily.has_value ()
-					;}
-				} QueueFamilyIndices;
+				VkDevice LogicalDevice;
 			} Vk;
 		private:
 			clock_t frame_timestamp = clock();

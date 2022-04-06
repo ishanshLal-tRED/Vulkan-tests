@@ -17,7 +17,17 @@ constexpr bool g_EnableValidationLayers = ( _DEBUG ? true : false );
 VKAPI_ATTR VkBool32 VKAPI_CALL vk_debug_callback(
 	VkDebugUtilsMessageSeverityFlagBitsEXT,VkDebugUtilsMessageTypeFlagsEXT,
 	const VkDebugUtilsMessengerCallbackDataEXT*,void*);
+
 bool is_vk_device_suitable (VkPhysicalDevice device);
+
+struct QueueFamilyIndices {
+	std::optional<uint32_t> GraphicsFamily;
+	inline bool AreAllFamiliesPresent() {
+		return true 
+			&& GraphicsFamily.has_value ()
+	;}
+};
+QueueFamilyIndices find_queue_families (VkPhysicalDevice device);
 
 void Application::InitializeVk (Context& current_context) {
 	LOG_trace(__FUNCSIG__); 
@@ -135,6 +145,37 @@ void Application::InitializeVk (Context& current_context) {
 	if (current_context.Vk.PhysicalDevice == VK_NULL_HANDLE)
 		THROW_CORE_Critical("failed to find hardware with vulkan support");
 	
+	{ // Specify queues
+		QueueFamilyIndices indices = find_queue_families (current_context.Vk.PhysicalDevice);
+		
+		float queue_priority = 1.0f;
+		VkDeviceQueueCreateInfo queue_create_info {
+			.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+			.queueFamilyIndex = indices.GraphicsFamily.value(),
+			.queueCount = 1,
+			.pQueuePriorities = &queue_priority
+		};
+		
+		VkPhysicalDeviceFeatures device_features{};
+		vkGetPhysicalDeviceFeatures (current_context.Vk.PhysicalDevice, &device_features);
+		
+		VkDeviceCreateInfo create_info{
+			.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+			.queueCreateInfoCount = 1,
+			.pQueueCreateInfos = &queue_create_info,
+			.enabledLayerCount = ( g_EnableValidationLayers ? s_ValidationLayers.size ():0 ),
+			.ppEnabledLayerNames = ( g_EnableValidationLayers ? s_ValidationLayers.data ():nullptr ),
+			.enabledExtensionCount = 0,
+			.pEnabledFeatures = &device_features
+		};
+		
+		if (vkCreateDevice (current_context.Vk.PhysicalDevice, &create_info, nullptr, &current_context.Vk.LogicalDevice) != VK_SUCCESS) 
+			THROW_CORE_Critical ("Failed to vreate logical device");
+
+		// How to get queues
+		VkQueue graphics_queue;
+		vkGetDeviceQueue (current_context.Vk.LogicalDevice, indices.GraphicsFamily.value(), 0, &graphics_queue);
+	}
 }
 
 void Application::Render (double latency) {
@@ -151,6 +192,8 @@ void Application::TerminateVk (Context& the_context) {
 		}
 	}
 
+	vkDestroyDevice(the_context.Vk.LogicalDevice, nullptr);
+	
 	vkDestroyInstance(the_context.Vk.MainInstance, nullptr);
 }
 
@@ -198,19 +241,7 @@ bool is_vk_device_suitable (VkPhysicalDevice device) {
 	vkGetPhysicalDeviceProperties (device, &device_properties);
 	vkGetPhysicalDeviceFeatures (device, &device_features);
 
-	decltype(Application::GetContext()->Vk.QueueFamilyIndices) indices;
-	{ // Find required queue families
-		uint32_t queue_family_count = 0;
-		vkGetPhysicalDeviceQueueFamilyProperties(device, &queue_family_count, nullptr);
-		std::vector<VkQueueFamilyProperties> queue_families(queue_family_count);
-		vkGetPhysicalDeviceQueueFamilyProperties(device, &queue_family_count, queue_families.data());
-		for (int i = 0; auto &queue_family: queue_families) {
-			if (queue_family.queueFlags & VK_QUEUE_GRAPHICS_BIT)
-				indices.GraphicsFamily = i;
-			if (indices.AreAllFamiliesPresent()) break;
-			++i;
-		}
-	}
+	QueueFamilyIndices indices = find_queue_families (device);
 
 	LOG_info("Testing device for suitability: {:s}", device_properties.deviceName);
 	return true
@@ -218,4 +249,20 @@ bool is_vk_device_suitable (VkPhysicalDevice device) {
 		&&	device_features.geometryShader
 		&&	indices.AreAllFamiliesPresent()
 	;
+}
+
+QueueFamilyIndices find_queue_families (VkPhysicalDevice device) { 
+	// Find required queue families
+	QueueFamilyIndices indices;
+	uint32_t queue_family_count = 0;
+	vkGetPhysicalDeviceQueueFamilyProperties(device, &queue_family_count, nullptr);
+	std::vector<VkQueueFamilyProperties> queue_families(queue_family_count);
+	vkGetPhysicalDeviceQueueFamilyProperties(device, &queue_family_count, queue_families.data());
+	for (int i = 0; auto &queue_family: queue_families) {
+		if (queue_family.queueFlags & VK_QUEUE_GRAPHICS_BIT)
+			indices.GraphicsFamily = i;
+		if (indices.AreAllFamiliesPresent()) break;
+		++i;
+	}
+	return indices;
 }
