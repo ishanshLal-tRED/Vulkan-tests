@@ -92,7 +92,8 @@ void Application::InitializeVk (Context& current_context) {
 
 	VkInstanceCreateInfo create_info{
 		.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
-		.pNext = (g_EnableValidationLayers ? (VkDebugUtilsMessengerCreateInfoEXT*) &debug_messenger_create_info : nullptr),
+		//.pNext = (g_EnableValidationLayers ? (VkDebugUtilsMessengerCreateInfoEXT*) &debug_messenger_create_info : nullptr),
+		//// Disabling due to non fata error, Refer: http://disq.us/p/2o823o8
 		.pApplicationInfo = &app_info,
 		.enabledLayerCount = (g_EnableValidationLayers ? s_ValidationLayers.size () : 0),
 		.ppEnabledLayerNames = (g_EnableValidationLayers ? s_ValidationLayers.data () : nullptr),
