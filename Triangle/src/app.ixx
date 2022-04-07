@@ -3,12 +3,11 @@ module;
 export import <span>;
 export import <optional>;
 
-import <time.h>;
+import <ctime>;
 
-
-import <vulkan\vulkan.h>;
-#define GLFW_INCLUDE_VULKAN
-#include <GLFW/glfw3.h>
+import <vulkan/vulkan.h>;
+// #define GLFW_INCLUDE_NONE // forgot macros dosen't work with modules/header units, unless using global macros (only for project level files :) )
+import <GLFW/glfw3.h>;
 
 export module MainApplication;
 
@@ -33,6 +32,13 @@ namespace Application
 				VkDebugUtilsMessengerEXT DebugMessenger;
 				VkPhysicalDevice PhysicalDevice = VK_NULL_HANDLE;
 				VkDevice LogicalDevice;
+				
+				VkSurfaceKHR  Surface;
+
+				struct {
+					VkQueue Graphics;
+					VkQueue Presentation;
+				} Queues;
 			} Vk;
 		private:
 			clock_t frame_timestamp = clock();

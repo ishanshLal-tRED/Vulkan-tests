@@ -4,10 +4,14 @@ import MainApplication;
 
 import <vector>;
 import <array>;
+import <set>;
 
-import <vulkan\vulkan.h>;
-#define GLFW_INCLUDE_VULKAN
-#include <GLFW/glfw3.h>
+#define VK_USE_PLATFORM_WIN32_KHR
+#include <vulkan/vulkan.h>; // cannot import beacause it hides away lots of things
+// #define GLFW_INCLUDE_NONE // forgot macros dosen't work with modules/header units, unless using global macros (only for project level files :) )
+import <GLFW/glfw3.h>;
+#define GLFW_EXPOSE_NATIVE_WIN32
+#include <GLFW/glfw3native.h>;
 
 static constexpr std::array<const char*, 1> s_ValidationLayers = {
 	"VK_LAYER_KHRONOS_validation"
@@ -18,16 +22,18 @@ VKAPI_ATTR VkBool32 VKAPI_CALL vk_debug_callback(
 	VkDebugUtilsMessageSeverityFlagBitsEXT,VkDebugUtilsMessageTypeFlagsEXT,
 	const VkDebugUtilsMessengerCallbackDataEXT*,void*);
 
-bool is_vk_device_suitable (VkPhysicalDevice device);
+bool is_vk_device_suitable (VkPhysicalDevice &device, VkSurfaceKHR &surface);
 
 struct QueueFamilyIndices {
 	std::optional<uint32_t> GraphicsFamily;
+	std::optional<uint32_t> PresentationFamily;
 	inline bool AreAllFamiliesPresent() {
 		return true 
 			&& GraphicsFamily.has_value ()
+			&& PresentationFamily.has_value ()
 	;}
 };
-QueueFamilyIndices find_queue_families (VkPhysicalDevice device);
+QueueFamilyIndices find_queue_families (VkPhysicalDevice &device, VkSurfaceKHR &surface);
 
 void Application::InitializeVk (Context& current_context) {
 	LOG_trace(__FUNCSIG__); 
@@ -123,10 +129,20 @@ void Application::InitializeVk (Context& current_context) {
 		if (func != nullptr) {
 		    result = func(current_context.Vk.MainInstance, &debug_messenger_create_info, nullptr, &current_context.Vk.DebugMessenger);
 		}
-		if (result != VK_SUCCESS){
+		if (result != VK_SUCCESS)
 			THROW_CORE_Critical("failed setting up vk_debug_messenger");
-		}
 	}
+
+	{ // Window surface creation // Platform specific way
+		VkWin32SurfaceCreateInfoKHR surface_info{
+			.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR,
+			.hinstance = GetModuleHandle(nullptr),
+			.hwnd = glfwGetWin32Window(current_context.MainWindow)
+		};
+
+		if (vkCreateWin32SurfaceKHR (current_context.Vk.MainInstance, &surface_info, nullptr, &current_context.Vk.Surface) != VK_SUCCESS) 
+			THROW_CORE_Critical("failed to create window surface");
+	}	
 
 	// Phisical device
 	uint32_t device_count = 0;
@@ -136,7 +152,7 @@ void Application::InitializeVk (Context& current_context) {
 	std::vector<VkPhysicalDevice> vk_enabled_devices (device_count);
 	vkEnumeratePhysicalDevices(current_context.Vk.MainInstance, &device_count, vk_enabled_devices.data ());
 	for (auto device: vk_enabled_devices){
-		if (is_vk_device_suitable (device)) {
+		if (is_vk_device_suitable (device, current_context.Vk.Surface)) {
 			current_context.Vk.PhysicalDevice = device;
 			break;
 		}
@@ -146,23 +162,28 @@ void Application::InitializeVk (Context& current_context) {
 		THROW_CORE_Critical("failed to find hardware with vulkan support");
 	
 	{ // Specify queues
-		QueueFamilyIndices indices = find_queue_families (current_context.Vk.PhysicalDevice);
+		QueueFamilyIndices indices = find_queue_families (current_context.Vk.PhysicalDevice, current_context.Vk.Surface);
 		
+		std::vector<VkDeviceQueueCreateInfo> queue_create_infos;
+		std::set<uint32_t> unique_queue_families = {indices.GraphicsFamily.value(), indices.PresentationFamily.value()};
+
 		float queue_priority = 1.0f;
-		VkDeviceQueueCreateInfo queue_create_info {
-			.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
-			.queueFamilyIndex = indices.GraphicsFamily.value(),
-			.queueCount = 1,
-			.pQueuePriorities = &queue_priority
-		};
+		for (uint32_t queue_family : unique_queue_families) {
+		    queue_create_infos.push_back(VkDeviceQueueCreateInfo {
+				.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+				.queueFamilyIndex = queue_family,
+				.queueCount = 1,
+				.pQueuePriorities = &queue_priority
+			});
+		}
 		
 		VkPhysicalDeviceFeatures device_features{};
 		vkGetPhysicalDeviceFeatures (current_context.Vk.PhysicalDevice, &device_features);
 		
 		VkDeviceCreateInfo create_info{
 			.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
-			.queueCreateInfoCount = 1,
-			.pQueueCreateInfos = &queue_create_info,
+			.queueCreateInfoCount = uint32_t(queue_create_infos.size ()),
+			.pQueueCreateInfos = queue_create_infos.data (),
 			.enabledLayerCount = ( g_EnableValidationLayers ? s_ValidationLayers.size ():0 ),
 			.ppEnabledLayerNames = ( g_EnableValidationLayers ? s_ValidationLayers.data ():nullptr ),
 			.enabledExtensionCount = 0,
@@ -172,9 +193,8 @@ void Application::InitializeVk (Context& current_context) {
 		if (vkCreateDevice (current_context.Vk.PhysicalDevice, &create_info, nullptr, &current_context.Vk.LogicalDevice) != VK_SUCCESS) 
 			THROW_CORE_Critical ("Failed to vreate logical device");
 
-		// How to get queues
-		VkQueue graphics_queue;
-		vkGetDeviceQueue (current_context.Vk.LogicalDevice, indices.GraphicsFamily.value(), 0, &graphics_queue);
+		vkGetDeviceQueue (current_context.Vk.LogicalDevice, indices.GraphicsFamily.value (), 0, &current_context.Vk.Queues.Graphics);
+		vkGetDeviceQueue (current_context.Vk.LogicalDevice, indices.PresentationFamily.value (), 0, &current_context.Vk.Queues.Presentation);
 	}
 }
 
@@ -194,6 +214,8 @@ void Application::TerminateVk (Context& the_context) {
 
 	vkDestroyDevice(the_context.Vk.LogicalDevice, nullptr);
 	
+	vkDestroySurfaceKHR(the_context.Vk.MainInstance, the_context.Vk.Surface, nullptr);
+
 	vkDestroyInstance(the_context.Vk.MainInstance, nullptr);
 }
 
@@ -232,7 +254,7 @@ VKAPI_ATTR VkBool32 VKAPI_CALL vk_debug_callback (VkDebugUtilsMessageSeverityFla
 	return VK_FALSE;
 };
 
-bool is_vk_device_suitable (VkPhysicalDevice device) {
+bool is_vk_device_suitable (VkPhysicalDevice &device, VkSurfaceKHR &surface) {
 	// We culd also implement a rating system for selecting most powerful GPU in system
 
 	VkPhysicalDeviceProperties device_properties;
@@ -241,7 +263,7 @@ bool is_vk_device_suitable (VkPhysicalDevice device) {
 	vkGetPhysicalDeviceProperties (device, &device_properties);
 	vkGetPhysicalDeviceFeatures (device, &device_features);
 
-	QueueFamilyIndices indices = find_queue_families (device);
+	QueueFamilyIndices indices = find_queue_families (device, surface);
 
 	LOG_info("Testing device for suitability: {:s}", device_properties.deviceName);
 	return true
@@ -251,7 +273,7 @@ bool is_vk_device_suitable (VkPhysicalDevice device) {
 	;
 }
 
-QueueFamilyIndices find_queue_families (VkPhysicalDevice device) { 
+QueueFamilyIndices find_queue_families (VkPhysicalDevice &device, VkSurfaceKHR &surface) { 
 	// Find required queue families
 	QueueFamilyIndices indices;
 	uint32_t queue_family_count = 0;
@@ -261,6 +283,10 @@ QueueFamilyIndices find_queue_families (VkPhysicalDevice device) {
 	for (int i = 0; auto &queue_family: queue_families) {
 		if (queue_family.queueFlags & VK_QUEUE_GRAPHICS_BIT)
 			indices.GraphicsFamily = i;
+		VkBool32 presentation_support_extension = false;
+		vkGetPhysicalDeviceSurfaceSupportKHR(device, i, surface, &presentation_support_extension);
+		if (presentation_support_extension)
+			indices.PresentationFamily = i;
 		if (indices.AreAllFamiliesPresent()) break;
 		++i;
 	}
