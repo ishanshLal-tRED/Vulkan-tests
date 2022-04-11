@@ -4,6 +4,7 @@ export import <span>;
 export import <optional>;
 
 import <ctime>;
+import <vector>;
 
 import <vulkan/vulkan.h>;
 // #define GLFW_INCLUDE_NONE // forgot macros dosen't work with modules/header units, unless using global macros (only for project level files :) )
@@ -39,6 +40,11 @@ namespace Application
 					VkQueue Graphics;
 					VkQueue Presentation;
 				} Queues;
+
+				VkSwapchainKHR Swapchain;
+				std::vector<VkImage> SwapchainImages;
+				VkFormat SwapchainImageFormat;
+				VkExtent2D SwapchainImageExtent;
 			} Vk;
 		private:
 			clock_t frame_timestamp = clock();
