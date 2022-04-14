@@ -1,6 +1,6 @@
 #include <logging.hxx>;
 
-import MainApplication;
+import MainApplication.MyApp;
 
 import <vector>;
 import <array>;
@@ -8,8 +8,8 @@ import <set>;
 #include <limits>;
 
 #define VK_USE_PLATFORM_WIN32_KHR
-#include <vulkan/vulkan.h>; // cannot import beacause it hides away lots of things
-// #define GLFW_INCLUDE_NONE // macros dosen't work with modules/header units, unless using global macros (only for project level files :) )
+#include <vulkan/vulkan.h>;
+
 import <GLFW/glfw3.h>;
 #define GLFW_EXPOSE_NATIVE_WIN32
 #include <GLFW/glfw3native.h>;
@@ -52,7 +52,7 @@ SwapChainSupportDetails query_swap_chain_support(VkPhysicalDevice &device, VkSur
 
 bool check_device_extensions_support(VkPhysicalDevice &device);
 
-void Application::InitializeVk (Context& current_context) {
+void MyApp::Instance::initializeVk () {
 	LOG_trace(__FUNCSIG__); 
 
 	VkApplicationInfo app_info {
@@ -135,16 +135,16 @@ void Application::InitializeVk (Context& current_context) {
 		.ppEnabledExtensionNames = vk_extensions_to_enable.data()
 	};
 
-	if (vkCreateInstance(&create_info, nullptr, &current_context.Vk.MainInstance) != VK_SUCCESS) {
+	if (vkCreateInstance(&create_info, nullptr, &m_Context.Vk.MainInstance) != VK_SUCCESS) {
 	    throw std::runtime_error("failed to create instance!");
 	}
 
 	if (g_EnableValidationLayers) { // Create Debug Utils Messenger
 
 		VkResult result = VK_ERROR_EXTENSION_NOT_PRESENT;
-		auto func = (PFN_vkCreateDebugUtilsMessengerEXT) vkGetInstanceProcAddr(current_context.Vk.MainInstance, "vkCreateDebugUtilsMessengerEXT");
+		auto func = (PFN_vkCreateDebugUtilsMessengerEXT) vkGetInstanceProcAddr(m_Context.Vk.MainInstance, "vkCreateDebugUtilsMessengerEXT");
 		if (func != nullptr) {
-		    result = func(current_context.Vk.MainInstance, &debug_messenger_create_info, nullptr, &current_context.Vk.DebugMessenger);
+		    result = func(m_Context.Vk.MainInstance, &debug_messenger_create_info, nullptr, &m_Context.Vk.DebugMessenger);
 		}
 		if (result != VK_SUCCESS)
 			THROW_CORE_Critical("failed setting up vk_debug_messenger");
@@ -154,32 +154,32 @@ void Application::InitializeVk (Context& current_context) {
 		VkWin32SurfaceCreateInfoKHR surface_info{
 			.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR,
 			.hinstance = GetModuleHandle(nullptr),
-			.hwnd = glfwGetWin32Window(current_context.MainWindow)
+			.hwnd = glfwGetWin32Window(m_Context.MainWindow)
 		};
 
-		if (vkCreateWin32SurfaceKHR (current_context.Vk.MainInstance, &surface_info, nullptr, &current_context.Vk.Surface) != VK_SUCCESS) 
+		if (vkCreateWin32SurfaceKHR (m_Context.Vk.MainInstance, &surface_info, nullptr, &m_Context.Vk.Surface) != VK_SUCCESS) 
 			THROW_CORE_Critical("failed to create window surface");
 	}	
 
 	// Phisical device
 	uint32_t device_count = 0;
-	vkEnumeratePhysicalDevices(current_context.Vk.MainInstance, &device_count, nullptr);
+	vkEnumeratePhysicalDevices(m_Context.Vk.MainInstance, &device_count, nullptr);
 	if (device_count == 0)
 		THROW_CORE_Critical("failed to find hardware with vulkan support");
 	std::vector<VkPhysicalDevice> vk_enabled_devices (device_count);
-	vkEnumeratePhysicalDevices(current_context.Vk.MainInstance, &device_count, vk_enabled_devices.data ());
+	vkEnumeratePhysicalDevices(m_Context.Vk.MainInstance, &device_count, vk_enabled_devices.data ());
 	for (auto device: vk_enabled_devices){
-		if (is_vk_device_suitable (device, current_context.Vk.Surface)) {
-			current_context.Vk.PhysicalDevice = device;
+		if (is_vk_device_suitable (device, m_Context.Vk.Surface)) {
+			m_Context.Vk.PhysicalDevice = device;
 			break;
 		}
 	}
 	
-	if (current_context.Vk.PhysicalDevice == VK_NULL_HANDLE)
+	if (m_Context.Vk.PhysicalDevice == VK_NULL_HANDLE)
 		THROW_CORE_Critical("failed to find hardware with vulkan support");
 	
 	{ // Specify queues
-		QueueFamilyIndices indices = find_queue_families (current_context.Vk.PhysicalDevice, current_context.Vk.Surface);
+		QueueFamilyIndices indices = find_queue_families (m_Context.Vk.PhysicalDevice, m_Context.Vk.Surface);
 		
 		std::vector<VkDeviceQueueCreateInfo> queue_create_infos;
 		std::set<uint32_t> unique_queue_families = {indices.GraphicsFamily.value(), indices.PresentationFamily.value()};
@@ -195,7 +195,7 @@ void Application::InitializeVk (Context& current_context) {
 		}
 
 		VkPhysicalDeviceFeatures device_features{};
-		vkGetPhysicalDeviceFeatures (current_context.Vk.PhysicalDevice, &device_features);
+		vkGetPhysicalDeviceFeatures (m_Context.Vk.PhysicalDevice, &device_features);
 		
 		VkDeviceCreateInfo create_info{
 			.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
@@ -208,16 +208,16 @@ void Application::InitializeVk (Context& current_context) {
 			.pEnabledFeatures = &device_features
 		};
 		
-		if (vkCreateDevice (current_context.Vk.PhysicalDevice, &create_info, nullptr, &current_context.Vk.LogicalDevice) != VK_SUCCESS) 
+		if (vkCreateDevice (m_Context.Vk.PhysicalDevice, &create_info, nullptr, &m_Context.Vk.LogicalDevice) != VK_SUCCESS) 
 			THROW_CORE_Critical ("Failed to vreate logical device");
 
-		vkGetDeviceQueue (current_context.Vk.LogicalDevice, indices.GraphicsFamily.value (), 0, &current_context.Vk.Queues.Graphics);
-		vkGetDeviceQueue (current_context.Vk.LogicalDevice, indices.PresentationFamily.value (), 0, &current_context.Vk.Queues.Presentation);
+		vkGetDeviceQueue (m_Context.Vk.LogicalDevice, indices.GraphicsFamily.value (), 0, &m_Context.Vk.Queues.Graphics);
+		vkGetDeviceQueue (m_Context.Vk.LogicalDevice, indices.PresentationFamily.value (), 0, &m_Context.Vk.Queues.Presentation);
 
 		VkExtent2D extent_selected;
 		VkSurfaceFormatKHR format_selected;
 		VkPresentModeKHR present_mode_selected;
-		SwapChainSupportDetails swap_chain_support = query_swap_chain_support(current_context.Vk.PhysicalDevice, current_context.Vk.Surface); {
+		SwapChainSupportDetails swap_chain_support = query_swap_chain_support(m_Context.Vk.PhysicalDevice, m_Context.Vk.Surface); {
 			// choose swap surface format
 			for (const auto& format: swap_chain_support.formats) {
 				if (format.format == VK_FORMAT_B8G8R8A8_SRGB && format.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
@@ -243,7 +243,7 @@ void Application::InitializeVk (Context& current_context) {
 			extent_selected = swap_chain_support.capabilities.currentExtent;
 		} else {
 			int width, height;
-			glfwGetFramebufferSize (current_context.MainWindow, &width, &height);
+			glfwGetFramebufferSize (m_Context.MainWindow, &width, &height);
 
 			extent_selected = VkExtent2D {
 				.width  = std::clamp (uint32_t(width) , swap_chain_support.capabilities.minImageExtent.width , swap_chain_support.capabilities.maxImageExtent.width),
@@ -254,7 +254,7 @@ void Application::InitializeVk (Context& current_context) {
 		image_count = image_count == 0 ? swap_chain_support.capabilities.minImageCount + 1 : image_count;
 		VkSwapchainCreateInfoKHR swapchain_create_info {
 			.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
-			.surface = current_context.Vk.Surface,
+			.surface = m_Context.Vk.Surface,
 			.minImageCount = image_count,
 			.imageFormat = format_selected.format,
 			.imageColorSpace = format_selected.colorSpace,
@@ -279,39 +279,65 @@ void Application::InitializeVk (Context& current_context) {
 			swapchain_create_info.queueFamilyIndexCount = 0;
 			swapchain_create_info.pQueueFamilyIndices = nullptr;
 		}
-		if (vkCreateSwapchainKHR (current_context.Vk.LogicalDevice, &swapchain_create_info, nullptr, &current_context.Vk.Swapchain) != VK_SUCCESS)
+		if (vkCreateSwapchainKHR (m_Context.Vk.LogicalDevice, &swapchain_create_info, nullptr, &m_Context.Vk.Swapchain) != VK_SUCCESS)
 			THROW_Critical("failed to create swapchain !");
 
 		uint32_t swapchain_images_count;
-		vkGetSwapchainImagesKHR(current_context.Vk.LogicalDevice, current_context.Vk.Swapchain, &swapchain_images_count, nullptr);
-		current_context.Vk.SwapchainImages.resize(swapchain_images_count);
-		vkGetSwapchainImagesKHR(current_context.Vk.LogicalDevice, current_context.Vk.Swapchain, &swapchain_images_count, current_context.Vk.SwapchainImages.data());
-		current_context.Vk.SwapchainImageFormat = format_selected.format;
-		current_context.Vk.SwapchainImageExtent = extent_selected;
+		vkGetSwapchainImagesKHR(m_Context.Vk.LogicalDevice, m_Context.Vk.Swapchain, &swapchain_images_count, nullptr);
+		m_Context.Vk.SwapchainImages.resize(swapchain_images_count);
+		vkGetSwapchainImagesKHR(m_Context.Vk.LogicalDevice, m_Context.Vk.Swapchain, &swapchain_images_count, m_Context.Vk.SwapchainImages.data());
+		m_Context.Vk.SwapchainImageFormat = format_selected.format;
+		m_Context.Vk.SwapchainImageExtent = extent_selected;
+	}
+
+	{ // create image views
+		m_Context.Vk.SwapchainImagesView.resize(m_Context.Vk.SwapchainImages.size());
+		for (size_t i = 0; i < m_Context.Vk.SwapchainImages.size (); ++i) {
+			VkImageViewCreateInfo create_info {
+				.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+				.image = m_Context.Vk.SwapchainImages[i],
+				.viewType = VK_IMAGE_VIEW_TYPE_2D,
+				.format = m_Context.Vk.SwapchainImageFormat,
+				.components = {VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY},
+				.subresourceRange = VkImageSubresourceRange {
+					    .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+					    .baseMipLevel = 0,
+					    .levelCount = 1,
+					    .baseArrayLayer = 0,
+					    .layerCount = 1
+				}
+			};
+
+			if (vkCreateImageView (m_Context.Vk.LogicalDevice, &create_info, nullptr, &m_Context.Vk.SwapchainImagesView[i]) != VK_SUCCESS)
+				THROW_Critical ("failed to create imagfe views!");
+		}
 	}
 }
 
-void Application::Render (double latency) {
+void MyApp::Instance::render (double latency) {
 	LOG_trace("{:s} {:f}", __FUNCSIG__, latency);
 }
 
-void Application::TerminateVk (Context& the_context) {
+void MyApp::Instance::terminateVk () {
 	LOG_trace ("{:s}", __FUNCSIG__);
 
 	if (g_EnableValidationLayers) { // Destroy Debug Utils Messenger
-		auto func = (PFN_vkDestroyDebugUtilsMessengerEXT) vkGetInstanceProcAddr(the_context.Vk.MainInstance, "vkDestroyDebugUtilsMessengerEXT");
+		auto func = (PFN_vkDestroyDebugUtilsMessengerEXT) vkGetInstanceProcAddr(m_Context.Vk.MainInstance, "vkDestroyDebugUtilsMessengerEXT");
 		if (func != nullptr) {
-		    func(the_context.Vk.MainInstance, the_context.Vk.DebugMessenger, nullptr);
+		    func(m_Context.Vk.MainInstance, m_Context.Vk.DebugMessenger, nullptr);
 		}
 	}
 
-	vkDestroySwapchainKHR(the_context.Vk.LogicalDevice, the_context.Vk.Swapchain, nullptr);
-
-	vkDestroyDevice(the_context.Vk.LogicalDevice, nullptr);
+	for (auto &image_view: m_Context.Vk.SwapchainImagesView) 
+		vkDestroyImageView (m_Context.Vk.LogicalDevice, image_view, nullptr);
 	
-	vkDestroySurfaceKHR(the_context.Vk.MainInstance, the_context.Vk.Surface, nullptr);
+	vkDestroySwapchainKHR(m_Context.Vk.LogicalDevice, m_Context.Vk.Swapchain, nullptr);
 
-	vkDestroyInstance(the_context.Vk.MainInstance, nullptr);
+	vkDestroyDevice(m_Context.Vk.LogicalDevice, nullptr);
+	
+	vkDestroySurfaceKHR(m_Context.Vk.MainInstance, m_Context.Vk.Surface, nullptr);
+
+	vkDestroyInstance(m_Context.Vk.MainInstance, nullptr);
 }
 
 VKAPI_ATTR VkBool32 VKAPI_CALL vk_debug_callback (VkDebugUtilsMessageSeverityFlagBitsEXT message_severity,

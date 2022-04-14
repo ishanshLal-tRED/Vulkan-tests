@@ -15,11 +15,14 @@ add_executable(${THIS_EXEC}
         ${HEADER_COLLECTION}
     # Source
         #"src/"
-        "src/main.cxx"
-        
-        "src/app.ixx"
+        "src/main.cppm"
 
-        "src/app_process.cppm" "src/app_vulkan.cppm"
+        "src/Core/app_default.ixx"
+        "src/Core/app.ixx"
+
+        "src/my_app.ixx"
+        "src/my_app/app_process.cppm"
+        "src/my_app/app_vulkan.cppm"
     )
 target_include_directories(${THIS_EXEC}
     PUBLIC
