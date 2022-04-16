@@ -17,4 +17,4 @@ message("|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 
 add_subdirectory(Triangle)
 add_subdirectory(TestImTerm)
-add_subdirectory(temp)
+# add_subdirectory(temp)

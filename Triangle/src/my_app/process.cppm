@@ -4,9 +4,10 @@ import <chrono>;
 
 import MainApplication.MyApp;
 
-#define GLFW_INCLUDE_VULKAN
-#include <GLFW/glfw3.h>
+import <GLFW/glfw3.h>;
+import Helpers.GLFW;
 
+// already very clean
 bool MyApp::Context::KeepContextRunning () {	
 	std::this_thread::sleep_for(std::chrono::milliseconds(100));
 	return !glfwWindowShouldClose(MainWindow);

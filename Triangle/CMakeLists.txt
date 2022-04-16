@@ -21,8 +21,11 @@ add_executable(${THIS_EXEC}
         "src/Core/app.ixx"
 
         "src/my_app.ixx"
-        "src/my_app/app_process.cppm"
-        "src/my_app/app_vulkan.cppm"
+        "src/my_app/process.cppm"
+        "src/my_app/vulkan.cppm"
+
+        "src/my_app/helpers/glfw.ixx"
+        "src/my_app/helpers/vk.ixx"
     )
 target_include_directories(${THIS_EXEC}
     PUBLIC
