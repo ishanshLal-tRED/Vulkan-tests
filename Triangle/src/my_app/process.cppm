@@ -20,8 +20,7 @@ void MyApp::Instance::setup (const std::span<char*> &argument_list) {
 	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 
 	auto framebuffer_resize_callback = [](GLFWwindow* window, int width, int height) {
-			LOG_trace ("FRAME_BUFFER RESIZE CALLBACK");
-			auto app_instance = (MyApp::Instance*)(/*MyApp::Instance::GetSingleton ()*/glfwGetWindowUserPointer(window));
+			auto app_instance = (MyApp::Instance*)(glfwGetWindowUserPointer(window));
 			app_instance->recreateSwapchainAndRelated ();
 		};
 

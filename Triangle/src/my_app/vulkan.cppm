@@ -86,6 +86,12 @@ void MyApp::Instance::initializeVk () {
 		, std::vector<std::pair<VkQueue*, uint32_t>>{{&m_Context.Vk.Queues.Graphics, queue_family_indices.GraphicsFamily.value ()}, {&m_Context.Vk.Queues.Presentation, queue_family_indices.PresentationFamily.value ()}}
 		, s_ValidationLayers, s_DeviceExtensions);
 
+	// Create shader modules	
+	m_Context.Vk.Modules.Vertex   = Helper::createShaderModule (m_Context.Vk.LogicalDevice, 
+			Helper::readFile (std::string() + PROJECT_ROOT_LOCATION + "/assets/hardcoded_triangle/vert.sprv"));
+	m_Context.Vk.Modules.Fragment = Helper::createShaderModule (m_Context.Vk.LogicalDevice, 
+			Helper::readFile (std::string() + PROJECT_ROOT_LOCATION + "/assets/hardcoded_triangle/frag.sprv"));
+
 	createSwapchainAndRelated ();
 
 	// Create command pool & buffer
@@ -317,11 +323,6 @@ void MyApp::Instance::createSwapchainAndRelated () {
 	}
 
 	{ // Create Graphics Pipeline
-		m_Context.Vk.Modules.Vertex   = Helper::createShaderModule (m_Context.Vk.LogicalDevice, 
-				Helper::readFile (std::string() + PROJECT_ROOT_LOCATION + "/assets/hardcoded_triangle/vert.sprv"));
-		m_Context.Vk.Modules.Fragment = Helper::createShaderModule (m_Context.Vk.LogicalDevice, 
-				Helper::readFile (std::string() + PROJECT_ROOT_LOCATION + "/assets/hardcoded_triangle/frag.sprv"));
-
 		VkPipelineShaderStageCreateInfo vert_shader_stage_info{
 			.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
 			.stage = VK_SHADER_STAGE_VERTEX_BIT,
