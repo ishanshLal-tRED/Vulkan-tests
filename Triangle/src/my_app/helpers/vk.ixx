@@ -56,6 +56,9 @@ namespace Helper{
 		void createFramebuffers (std::vector<VkFramebuffer>&
 			,VkDevice&, VkRenderPass&, const std::span<VkImageView>
 			,VkExtent2D);
+		
+		void createCommandPoolAndBuffer (VkCommandPool&, std::span<VkCommandBuffer>
+			,VkDevice&, uint32_t);
 	};
 
     template<bool EnableValidationLayers>
@@ -320,12 +323,23 @@ namespace Helper{
 		,VkDevice& device, VkAttachmentDescription color_attachment
 		,const std::span<VkSubpassDescription> subpasses) 
 	{
+		VkSubpassDependency dependency {
+			.srcSubpass = VK_SUBPASS_EXTERNAL,
+			.dstSubpass = 0,
+			.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+			.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+			.srcAccessMask = 0,
+			.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT
+		};
+		
 		VkRenderPassCreateInfo render_pass_info {
 			.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
 			.attachmentCount = 1,
 			.pAttachments = &color_attachment,
 			.subpassCount = uint32_t(subpasses.size ()),
-			.pSubpasses = subpasses.data ()
+			.pSubpasses = subpasses.data (),
+			.dependencyCount = 1,
+			.pDependencies = &dependency
 		};
 	
 		if (vkCreateRenderPass(device, &render_pass_info, nullptr, &render_pass) != VK_SUCCESS)
@@ -469,6 +483,32 @@ namespace Helper{
 			if (vkCreateFramebuffer(device, &framebuffer_info, nullptr, &framebuffers[i]) != VK_SUCCESS)
 			    THROW_CORE_Critical("failed to create framebuffer!");
 			
+		}
+	}
+
+	void createCommandPoolAndBuffer (VkCommandPool& command_pool, std::span<VkCommandBuffer> command_buffers
+		,VkDevice& device, uint32_t queue_family_index)
+	{
+		// Create command pool
+		VkCommandPoolCreateInfo pool_info {
+			.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+			.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+			.queueFamilyIndex = queue_family_index
+		};
+
+		if (vkCreateCommandPool (device, &pool_info, nullptr, &command_pool) != VK_SUCCESS) 
+			THROW_CORE_Critical ("failed to create command pool!");
+
+		// Create command buffer
+		VkCommandBufferAllocateInfo alloc_info {
+			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+			.commandPool = command_pool,
+			.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+			.commandBufferCount = uint32_t (command_buffers.size ())
+		};
+		
+		if (vkAllocateCommandBuffers(device, &alloc_info, command_buffers.data ()) != VK_SUCCESS) {
+		    THROW_CORE_Critical ("failed to allocate command buffers!");
 		}
 	}
 };

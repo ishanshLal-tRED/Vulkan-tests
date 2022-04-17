@@ -22,7 +22,7 @@ static std::array<const char*, 1> s_ValidationLayers = {
 
 constexpr bool g_EnableValidationLayers = ( _DEBUG ? true : false );
 
-VKAPI_ATTR VkBool32 VKAPI_CALL vk_debug_callback(
+VKAPI_ATTR VkBool32 VKAPI_CALL vk_debug_callback (
 	VkDebugUtilsMessageSeverityFlagBitsEXT,VkDebugUtilsMessageTypeFlagsEXT,
 	const VkDebugUtilsMessengerCallbackDataEXT*, void*);
 
@@ -82,10 +82,165 @@ void MyApp::Instance::initializeVk () {
 	
 	// Phisical device & Queues
 	const QueueFamilyIndices queue_family_indices (m_Context.Vk.PhysicalDevice, m_Context.Vk.Surface);
-
 	Helper::createLogicalDevice(m_Context.Vk.LogicalDevice, m_Context.Vk.PhysicalDevice
 		, std::vector<std::pair<VkQueue*, uint32_t>>{{&m_Context.Vk.Queues.Graphics, queue_family_indices.GraphicsFamily.value ()}, {&m_Context.Vk.Queues.Presentation, queue_family_indices.PresentationFamily.value ()}}
 		, s_ValidationLayers, s_DeviceExtensions);
+
+	createSwapchainAndRelated ();
+
+	// Create command pool & buffer
+	Helper::createCommandPoolAndBuffer (m_Context.Vk.CommandPool, m_Context.Vk.CommandBuffers
+		,m_Context.Vk.LogicalDevice, queue_family_indices.GraphicsFamily.value ());
+
+	// Create syncronisation objects
+	VkSemaphoreCreateInfo semaphore_info { .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
+	VkFenceCreateInfo fence_info { 
+		.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+		.flags = VK_FENCE_CREATE_SIGNALED_BIT
+	};
+
+	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
+		if ( vkCreateSemaphore (m_Context.Vk.LogicalDevice, &semaphore_info, nullptr, &m_Context.Vk.ImageAvailableSemaphores[i]) != VK_SUCCESS
+		  || vkCreateSemaphore (m_Context.Vk.LogicalDevice, &semaphore_info, nullptr, &m_Context.Vk.RenderFinishedSemaphores[i]) != VK_SUCCESS
+		  || vkCreateFence (m_Context.Vk.LogicalDevice, &fence_info, nullptr, &m_Context.Vk.InFlightFences[i]) != VK_SUCCESS)
+			THROW_Critical ("failed to create sync locks!");
+	}
+}
+
+void MyApp::Instance::render (double latency) {
+	LOG_trace("{:s} {:f}", __FUNCSIG__, latency);
+	const uint32_t current_frame_flight = m_CurrentFrame++ % MAX_FRAMES_IN_FLIGHT;
+
+	vkWaitForFences (m_Context.Vk.LogicalDevice, 1, &m_Context.Vk.InFlightFences[current_frame_flight], VK_TRUE, UINT64_MAX);
+	
+	auto record_command_buffer = [](VkCommandBuffer& command_buffer, VkPipeline &graphics_pipeline, VkRenderPass& render_pass, VkFramebuffer &framebuffer/*uint32_t image_index*/, VkExtent2D extent) {
+		VkCommandBufferBeginInfo begin_info {
+			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+			.flags = 0, // Optional
+			.pInheritanceInfo = nullptr // Optional
+		};
+
+		if (vkBeginCommandBuffer(command_buffer, &begin_info) != VK_SUCCESS) {
+		    THROW_Critical("failed to begin recording command buffer!");
+		}
+		
+		VkClearValue clear_color = {{{0.0f, 0.0f, 0.0f, 1.0f}}};
+
+		VkRenderPassBeginInfo render_pass_info{
+			.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+			.renderPass = render_pass,
+			.framebuffer = framebuffer,
+			.renderArea = {{0, 0}, extent},
+			.clearValueCount = 1,
+			.pClearValues = &clear_color
+		};
+		
+		vkCmdBeginRenderPass(command_buffer, &render_pass_info, VK_SUBPASS_CONTENTS_INLINE);
+	
+		vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphics_pipeline);
+		vkCmdDraw(command_buffer, 3, 1, 0, 0);
+
+		vkCmdEndRenderPass(command_buffer);
+
+		if (vkEndCommandBuffer(command_buffer) != VK_SUCCESS)
+		    THROW_Critical("failed to record command buffer!");
+	};
+	
+	uint32_t image_index;
+    switch(vkAcquireNextImageKHR(m_Context.Vk.LogicalDevice, m_Context.Vk.Swapchain, UINT64_MAX, m_Context.Vk.ImageAvailableSemaphores[current_frame_flight], VK_NULL_HANDLE, &image_index)) {
+		case VK_SUCCESS: break;
+		case VK_ERROR_OUT_OF_DATE_KHR:			
+		case VK_SUBOPTIMAL_KHR: // Recreate swapchain and related
+			recreateSwapchainAndRelated ();
+			return;
+		default:
+			THROW_Critical ("failed to acquire swapchain image");
+	}
+	
+	vkResetFences (m_Context.Vk.LogicalDevice, 1, &m_Context.Vk.InFlightFences[current_frame_flight]);
+
+	vkResetCommandBuffer(m_Context.Vk.CommandBuffers[current_frame_flight], 0);
+	record_command_buffer(m_Context.Vk.CommandBuffers[current_frame_flight], m_Context.Vk.GraphicsPipeline, m_Context.Vk.RenderPass, m_Context.Vk.SwapchainFramebuffers[image_index], m_Context.Vk.SwapchainImageExtent);
+
+	VkSemaphore wait_semaphores[] = {m_Context.Vk.ImageAvailableSemaphores[current_frame_flight]};
+	VkPipelineStageFlags wait_stages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
+	VkSemaphore signal_semaphores[] = {m_Context.Vk.RenderFinishedSemaphores[current_frame_flight]};
+	VkSubmitInfo submitInfo {
+		.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+		.waitSemaphoreCount = 1,
+		.pWaitSemaphores = wait_semaphores,
+		.pWaitDstStageMask = wait_stages,
+
+		.commandBufferCount = 1,
+		.pCommandBuffers = &m_Context.Vk.CommandBuffers[current_frame_flight],
+
+		.signalSemaphoreCount = 1,
+		.pSignalSemaphores = signal_semaphores
+	};
+
+	if (vkQueueSubmit(m_Context.Vk.Queues.Graphics, 1, &submitInfo, m_Context.Vk.InFlightFences[current_frame_flight]) != VK_SUCCESS)
+	    THROW_Critical("failed to submit draw command buffer!");
+
+	VkPresentInfoKHR presentInfo {
+		.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+		.waitSemaphoreCount = 1,
+		.pWaitSemaphores = signal_semaphores,
+		.swapchainCount = 1,
+		.pSwapchains = &m_Context.Vk.Swapchain,
+		.pImageIndices = &image_index,
+		.pResults = nullptr // Optional
+	};
+
+	vkQueuePresentKHR(m_Context.Vk.Queues.Presentation, &presentInfo);
+}
+
+void MyApp::Instance::terminateVk () {
+	LOG_trace ("{:s}", __FUNCSIG__);
+	vkDeviceWaitIdle (m_Context.Vk.LogicalDevice);
+
+	vkDestroyShaderModule (m_Context.Vk.LogicalDevice, m_Context.Vk.Modules.Vertex, nullptr);
+	vkDestroyShaderModule (m_Context.Vk.LogicalDevice, m_Context.Vk.Modules.Fragment, nullptr);
+
+	cleanupSwapchainAndRelated ();
+
+	for (int  i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
+		vkDestroySemaphore (m_Context.Vk.LogicalDevice, m_Context.Vk.ImageAvailableSemaphores[i], nullptr);
+		vkDestroySemaphore (m_Context.Vk.LogicalDevice, m_Context.Vk.RenderFinishedSemaphores[i], nullptr);
+		vkDestroyFence (m_Context.Vk.LogicalDevice, m_Context.Vk.InFlightFences[i], nullptr);
+	}
+	
+	vkDestroyCommandPool (m_Context.Vk.LogicalDevice, m_Context.Vk.CommandPool, nullptr);
+
+	vkDestroyDevice (m_Context.Vk.LogicalDevice, nullptr);
+
+	if (g_EnableValidationLayers) { // Destroy Debug Utils Messenger
+		auto func = (PFN_vkDestroyDebugUtilsMessengerEXT) vkGetInstanceProcAddr(m_Context.Vk.MainInstance, "vkDestroyDebugUtilsMessengerEXT");
+		if (func != nullptr) {
+		    func(m_Context.Vk.MainInstance, m_Context.Vk.DebugMessenger, nullptr);
+		}
+	}
+	
+	vkDestroySurfaceKHR (m_Context.Vk.MainInstance, m_Context.Vk.Surface, nullptr);
+
+	vkDestroyInstance (m_Context.Vk.MainInstance, nullptr);
+}
+
+void MyApp::Instance::cleanupSwapchainAndRelated () {
+	for (auto &framebuffer: m_Context.Vk.SwapchainFramebuffers) 
+		vkDestroyFramebuffer (m_Context.Vk.LogicalDevice, framebuffer, nullptr);
+
+	vkDestroyPipeline(m_Context.Vk.LogicalDevice, m_Context.Vk.GraphicsPipeline, nullptr);
+	vkDestroyPipelineLayout(m_Context.Vk.LogicalDevice, m_Context.Vk.PipelineLayout, nullptr);
+
+	vkDestroyRenderPass(m_Context.Vk.LogicalDevice, m_Context.Vk.RenderPass, nullptr);
+	
+	for (auto &image_view: m_Context.Vk.SwapchainImagesView) 
+		vkDestroyImageView (m_Context.Vk.LogicalDevice, image_view, nullptr);
+	
+	vkDestroySwapchainKHR (m_Context.Vk.LogicalDevice, m_Context.Vk.Swapchain, nullptr);
+}
+void MyApp::Instance::createSwapchainAndRelated () {
+	const QueueFamilyIndices queue_family_indices (m_Context.Vk.PhysicalDevice, m_Context.Vk.Surface);
 
 	// Swapchain related data extraction
 	VkExtent2D extent_selected;
@@ -127,9 +282,11 @@ void MyApp::Instance::initializeVk () {
 		, m_Context.Vk.Surface, m_Context.Vk.LogicalDevice
 		, swap_chain_support.capabilities, m_Context.Vk.SwapchainImageExtent, format_selected, present_mode_selected
 		, queue_family_indices.GraphicsFamily.value (), queue_family_indices.PresentationFamily.value ());
-
+    
+	// Create Image Views
 	Helper::createImageViews(m_Context.Vk.SwapchainImagesView, m_Context.Vk.LogicalDevice, m_Context.Vk.SwapchainImageFormat, m_Context.Vk.SwapchainImages);
-
+    
+	// Create Render Pass
 	{
 		VkAttachmentDescription color_attachment {
 			.format = m_Context.Vk.SwapchainImageFormat,
@@ -209,102 +366,13 @@ void MyApp::Instance::initializeVk () {
 	Helper::createFramebuffers (m_Context.Vk.SwapchainFramebuffers
 		,m_Context.Vk.LogicalDevice, m_Context.Vk.RenderPass, m_Context.Vk.SwapchainImagesView
 		,m_Context.Vk.SwapchainImageExtent);
-
-	{ 
-		// Create command pool
-		VkCommandPoolCreateInfo pool_info {
-			.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-			.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
-			.queueFamilyIndex = queue_family_indices.GraphicsFamily.value()
-		};
-
-		if (vkCreateCommandPool (m_Context.Vk.LogicalDevice, &pool_info, nullptr, &m_Context.Vk.CommandPool) != VK_SUCCESS) 
-			THROW_CORE_Critical ("failed to create command pool!");
-
-		// Create command buffer
-		VkCommandBufferAllocateInfo allocInfo {
-			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-			.commandPool = m_Context.Vk.CommandPool,
-			.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-			.commandBufferCount = 1
-		};
-		
-		if (vkAllocateCommandBuffers(m_Context.Vk.LogicalDevice, &allocInfo, &m_Context.Vk.CommandBuffer) != VK_SUCCESS) {
-		    THROW_CORE_Critical ("failed to allocate command buffers!");
-		}
-	}
 }
 
-void MyApp::Instance::render (double latency) {
-	LOG_trace("{:s} {:f}", __FUNCSIG__, latency);
-
-	auto record_command_buffer = [](VkCommandBuffer& command_buffer, VkPipeline &graphics_pipeline, VkRenderPass& render_pass, VkFramebuffer &framebuffer/*uint32_t image_index*/, VkExtent2D extent) {
-		VkCommandBufferBeginInfo begin_info {
-			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-			.flags = 0, // Optional
-			.pInheritanceInfo = nullptr // Optional
-		};
-
-		if (vkBeginCommandBuffer(command_buffer, &begin_info) != VK_SUCCESS) {
-		    THROW_Critical("failed to begin recording command buffer!");
-		}
-		
-		
-		VkClearValue clear_color = {{{0.0f, 0.0f, 0.0f, 1.0f}}};
-		VkRenderPassBeginInfo render_pass_info{
-			.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
-			.renderPass = render_pass,
-			.framebuffer = framebuffer,
-			.renderArea = {{0, 0}, extent},
-			.clearValueCount = 1,
-			.pClearValues = &clear_color
-		};
-		
-		vkCmdBeginRenderPass(command_buffer, &render_pass_info, VK_SUBPASS_CONTENTS_INLINE);
-	
-		vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphics_pipeline);
-		vkCmdDraw(command_buffer, 3, 1, 0, 0);
-
-		vkCmdEndRenderPass(command_buffer);
-
-		if (vkEndCommandBuffer(command_buffer) != VK_SUCCESS)
-		    THROW_Critical("failed to record command buffer!");
-	};
-}
-
-void MyApp::Instance::terminateVk () {
-	LOG_trace ("{:s}", __FUNCSIG__);
-
-	vkDestroyCommandPool (m_Context.Vk.LogicalDevice, m_Context.Vk.CommandPool, nullptr);
-
-	for (auto &framebuffer: m_Context.Vk.SwapchainFramebuffers) 
-		vkDestroyFramebuffer (m_Context.Vk.LogicalDevice, framebuffer, nullptr);
-
-	vkDestroyPipeline(m_Context.Vk.LogicalDevice, m_Context.Vk.GraphicsPipeline, nullptr);
-	vkDestroyPipelineLayout(m_Context.Vk.LogicalDevice, m_Context.Vk.PipelineLayout, nullptr);
-
-	vkDestroyRenderPass(m_Context.Vk.LogicalDevice, m_Context.Vk.RenderPass, nullptr);
-
-	vkDestroyShaderModule (m_Context.Vk.LogicalDevice, m_Context.Vk.Modules.Vertex, nullptr);
-	vkDestroyShaderModule (m_Context.Vk.LogicalDevice, m_Context.Vk.Modules.Fragment, nullptr);
-
-	for (auto &image_view: m_Context.Vk.SwapchainImagesView) 
-		vkDestroyImageView (m_Context.Vk.LogicalDevice, image_view, nullptr);
-	
-	vkDestroySwapchainKHR (m_Context.Vk.LogicalDevice, m_Context.Vk.Swapchain, nullptr);
-
-	vkDestroyDevice (m_Context.Vk.LogicalDevice, nullptr);
-
-	if (g_EnableValidationLayers) { // Destroy Debug Utils Messenger
-		auto func = (PFN_vkDestroyDebugUtilsMessengerEXT) vkGetInstanceProcAddr(m_Context.Vk.MainInstance, "vkDestroyDebugUtilsMessengerEXT");
-		if (func != nullptr) {
-		    func(m_Context.Vk.MainInstance, m_Context.Vk.DebugMessenger, nullptr);
-		}
-	}
-	
-	vkDestroySurfaceKHR (m_Context.Vk.MainInstance, m_Context.Vk.Surface, nullptr);
-
-	vkDestroyInstance (m_Context.Vk.MainInstance, nullptr);
+void MyApp::Instance::recreateSwapchainAndRelated () {
+	LOG_trace (__FUNCSIG__);
+	vkDeviceWaitIdle (m_Context.Vk.LogicalDevice);
+	cleanupSwapchainAndRelated ();
+	createSwapchainAndRelated ();
 }
 
 VKAPI_ATTR VkBool32 VKAPI_CALL vk_debug_callback (VkDebugUtilsMessageSeverityFlagBitsEXT message_severity,

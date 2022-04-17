@@ -18,11 +18,19 @@ void MyApp::Instance::setup (const std::span<char*> &argument_list) {
 
 	glfwInit();
 	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-	glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+
+	auto framebuffer_resize_callback = [](GLFWwindow* window, int width, int height) {
+			LOG_trace ("FRAME_BUFFER RESIZE CALLBACK");
+			auto app_instance = (MyApp::Instance*)(/*MyApp::Instance::GetSingleton ()*/glfwGetWindowUserPointer(window));
+			app_instance->recreateSwapchainAndRelated ();
+		};
 
 	if (m_Context.MainWindow == nullptr){
 		m_Context.MainWindow = glfwCreateWindow(m_Context.WIDTH, m_Context.HEIGHT, "Vulkan window", nullptr, nullptr);
 	}
+
+	glfwSetWindowUserPointer(m_Context.MainWindow, this);
+	glfwSetFramebufferSizeCallback(m_Context.MainWindow, framebuffer_resize_callback);
 }
 
 void MyApp::Instance::update (double latency) {

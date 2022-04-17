@@ -8,6 +8,8 @@ export import MainApplication.Base;
 export module MainApplication.MyApp;
 
 namespace MyApp {
+	export constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 2;
+
 	export struct Context: public Application::BaseContext {
 
 		virtual bool KeepContextRunning() override;
@@ -15,6 +17,7 @@ namespace MyApp {
 		const int WIDTH = 800, HEIGHT = 600;
 		double UpdateLatency   = 0.0;
 		double RenderLatency   = 0.0;
+
 		
 		GLFWwindow* MainWindow = nullptr;
 		
@@ -50,8 +53,11 @@ namespace MyApp {
 			std::vector<VkFramebuffer> SwapchainFramebuffers;
 
 			VkCommandPool CommandPool;
+			VkCommandBuffer CommandBuffers[MAX_FRAMES_IN_FLIGHT]; // some how array
 
-			VkCommandBuffer CommandBuffer;
+			VkSemaphore RenderFinishedSemaphores[MAX_FRAMES_IN_FLIGHT];
+			VkSemaphore ImageAvailableSemaphores[MAX_FRAMES_IN_FLIGHT];
+			VkFence InFlightFences[MAX_FRAMES_IN_FLIGHT];
 		} Vk;
 	};
 
@@ -64,6 +70,11 @@ namespace MyApp {
 		virtual void terminateVk () override;
 		virtual void cleanup () override;
 
-		int val = 10;
+	private:
+		void cleanupSwapchainAndRelated ();
+		void createSwapchainAndRelated ();
+		void recreateSwapchainAndRelated ();
+	private:
+		size_t m_CurrentFrame = 0;
 	};
 }
