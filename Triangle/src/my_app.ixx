@@ -48,6 +48,10 @@ namespace MyApp {
 			VkPipeline GraphicsPipeline;
 
 			std::vector<VkFramebuffer> SwapchainFramebuffers;
+
+			VkCommandPool CommandPool;
+
+			VkCommandBuffer CommandBuffer;
 		} Vk;
 	};
 

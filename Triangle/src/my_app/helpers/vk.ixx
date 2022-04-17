@@ -52,6 +52,10 @@ namespace Helper{
 		
 		void createRenderPasses (VkRenderPass&
 			,VkDevice&, VkAttachmentDescription, const std::span<VkSubpassDescription>);
+
+		void createFramebuffers (std::vector<VkFramebuffer>&
+			,VkDevice&, VkRenderPass&, const std::span<VkImageView>
+			,VkExtent2D);
 	};
 
     template<bool EnableValidationLayers>
@@ -442,5 +446,29 @@ namespace Helper{
 
 		if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipeline_info, nullptr, &graphics_pipeline) != VK_SUCCESS)
 		    THROW_CORE_Critical ("failed to create graphics pipeline!");
+	}
+
+	void createFramebuffers (std::vector<VkFramebuffer>& framebuffers
+		,VkDevice& device, VkRenderPass& render_pass, const std::span<VkImageView> images_view
+		,VkExtent2D extent)
+	{
+		framebuffers.resize (images_view.size ());
+		for (uint32_t i = 0; i < images_view.size (); ++i) {
+			VkImageView attachment[] = { images_view[i] };
+			
+			VkFramebufferCreateInfo framebuffer_info {
+				.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+				.renderPass = render_pass,
+				.attachmentCount = 1,
+				.pAttachments = attachment,
+				.width  = extent.width,
+				.height = extent.height,
+				.layers = 1
+			};
+			
+			if (vkCreateFramebuffer(device, &framebuffer_info, nullptr, &framebuffers[i]) != VK_SUCCESS)
+			    THROW_CORE_Critical("failed to create framebuffer!");
+			
+		}
 	}
 };
