@@ -6,6 +6,7 @@ dependencies:
 > vcpkg, <br>
 > vulkan (LunarG reccommended), <br>
 > C++ 20 compatible compiler (with module support) <br>
+> powershell (mine: 7.2.2) <br>
 
 Objectives:
 > cross platform <br>

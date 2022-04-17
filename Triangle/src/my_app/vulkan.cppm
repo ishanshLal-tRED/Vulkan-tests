@@ -10,6 +10,7 @@ import <set>;
 import <vulkan/vulkan.h>;
 import Helpers.Vk;
 import Helpers.GLFW;
+import Helpers.Files;
 
 static std::array<const char*, 1> s_DeviceExtensions = {
 	VK_KHR_SWAPCHAIN_EXTENSION_NAME
@@ -129,6 +130,128 @@ void MyApp::Instance::initializeVk () {
 		, indices.GraphicsFamily.value (), indices.PresentationFamily.value ());
 
 	Helper::createImageViews(m_Context.Vk.SwapchainImagesView, m_Context.Vk.LogicalDevice, m_Context.Vk.SwapchainImageFormat, m_Context.Vk.SwapchainImages);
+
+	{ // Create Graphics Pipeline
+		auto vert_shader_code = Helper::readFile (std::string() + PROJECT_ROOT_LOCATION + "/assets/hardcoded_triangle/vert.sprv");
+		auto frag_shader_code = Helper::readFile (std::string() + PROJECT_ROOT_LOCATION + "/assets/hardcoded_triangle/frag.sprv");
+		m_Context.Vk.Modules.Vertex   = Helper::createShaderModule (m_Context.Vk.LogicalDevice, vert_shader_code);
+		m_Context.Vk.Modules.Fragment = Helper::createShaderModule (m_Context.Vk.LogicalDevice, frag_shader_code);
+
+		VkPipelineShaderStageCreateInfo vert_shader_stage_info{
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+			.stage = VK_SHADER_STAGE_VERTEX_BIT,
+			.module = m_Context.Vk.Modules.Vertex,
+			.pName = "main"
+		};
+		VkPipelineShaderStageCreateInfo frag_shader_stage_info{
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+			.stage = VK_SHADER_STAGE_FRAGMENT_BIT,
+			.module = m_Context.Vk.Modules.Fragment,
+			.pName = "main"
+		};
+		VkPipelineShaderStageCreateInfo shader_stages[] = {vert_shader_stage_info, frag_shader_stage_info};
+		
+		VkPipelineVertexInputStateCreateInfo vertex_input_info {
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+			.vertexBindingDescriptionCount = 0,
+			.pVertexBindingDescriptions = nullptr, // Optional
+			.vertexAttributeDescriptionCount = 0,
+			.pVertexAttributeDescriptions = nullptr // Optional
+		};
+		VkPipelineInputAssemblyStateCreateInfo nput_assembly_info {
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+			.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+			.primitiveRestartEnable = VK_FALSE
+		};
+
+		VkViewport viewport{
+			.x = 0.0f,
+			.y = 0.0f,
+			.width  = float (m_Context.Vk.SwapchainImageExtent.width),
+			.height = float (m_Context.Vk.SwapchainImageExtent.height),
+			.minDepth = 0.0f,
+			.maxDepth = 1.0f
+		};
+		VkRect2D scissor{
+			.offset = {0, 0},
+			.extent = m_Context.Vk.SwapchainImageExtent
+		};
+		VkPipelineViewportStateCreateInfo viewport_state{
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+			.viewportCount = 1,
+			.pViewports = &viewport,
+			.scissorCount = 1,
+			.pScissors = &scissor
+		};
+		constexpr bool enable_depth_clamping = false; // clamps fragments beyond near and far planes // GPU specific feature
+		VkPipelineRasterizationStateCreateInfo rasterizer {
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+			.depthClampEnable = enable_depth_clamping ? VK_TRUE : VK_FALSE,
+			.rasterizerDiscardEnable = VK_FALSE,
+			.polygonMode = VK_POLYGON_MODE_FILL,
+			.cullMode = VK_CULL_MODE_BACK_BIT,
+			.frontFace = VK_FRONT_FACE_CLOCKWISE,
+			.depthBiasEnable = VK_FALSE,
+			.depthBiasConstantFactor = 0.0f, // Optional
+			.depthBiasClamp = 0.0f, // Optional
+			.depthBiasSlopeFactor = 0.0f, // Optional
+
+			.lineWidth = 1.0f
+		};
+		VkPipelineMultisampleStateCreateInfo multisampling {
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+			.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
+			.sampleShadingEnable = VK_FALSE,
+			.minSampleShading = 1.0f, // Optional
+			.pSampleMask = nullptr, // Optional
+			.alphaToCoverageEnable = VK_FALSE, // Optional
+			.alphaToOneEnable = VK_FALSE // Optional
+		};
+		VkPipelineColorBlendAttachmentState color_blend_attachment {
+			.blendEnable = VK_FALSE,
+
+			.srcColorBlendFactor = VK_BLEND_FACTOR_ONE, // Optional
+			.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO, // Optional
+			.colorBlendOp = VK_BLEND_OP_ADD, // Optional
+			.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE, // Optional
+			.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO, // Optional
+			.alphaBlendOp = VK_BLEND_OP_ADD, // Optional
+
+			.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT
+		};
+		VkPipelineColorBlendStateCreateInfo color_blending {
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+			.logicOpEnable = VK_FALSE,
+			.logicOp = VK_LOGIC_OP_COPY, // Optional
+			.attachmentCount = 1,
+			.pAttachments = &color_blend_attachment,
+			.blendConstants = {0.0f, 0.0f, 0.0f, 0.0f} // Optional
+		};
+
+		#if 0
+		// States that can be tweaked after pipeline creation // will be required to be specified at draw time
+		std::array<VkDynamicState> dynamicStates = {
+		    VK_DYNAMIC_STATE_VIEWPORT,
+		    VK_DYNAMIC_STATE_LINE_WIDTH
+		};
+		
+		VkPipelineDynamicStateCreateInfo dynamicState{
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+			.dynamicStateCount = uint32_t(dynamicStates.size()),
+			.pDynamicStates = dynamicStates.data(),
+		};
+		#endif
+
+		VkPipelineLayoutCreateInfo pipeline_layout_info {
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+			.setLayoutCount = 0, // Optional
+			.pSetLayouts = nullptr, // Optional
+			.pushConstantRangeCount = 0, // Optional
+			.pPushConstantRanges = nullptr, // Optional
+		};
+		if (vkCreatePipelineLayout(m_Context.Vk.LogicalDevice, &pipeline_layout_info, nullptr, &m_Context.Vk.PipelineLayout) != VK_SUCCESS) 
+			THROW_CORE_Critical ("failed to create pipeline layout")
+	}
 }
 
 void MyApp::Instance::render (double latency) {
@@ -147,14 +270,19 @@ void MyApp::Instance::terminateVk () {
 
 	for (auto &image_view: m_Context.Vk.SwapchainImagesView) 
 		vkDestroyImageView (m_Context.Vk.LogicalDevice, image_view, nullptr);
-	
-	vkDestroySwapchainKHR(m_Context.Vk.LogicalDevice, m_Context.Vk.Swapchain, nullptr);
 
-	vkDestroyDevice(m_Context.Vk.LogicalDevice, nullptr);
-	
-	vkDestroySurfaceKHR(m_Context.Vk.MainInstance, m_Context.Vk.Surface, nullptr);
+	vkDestroyPipelineLayout(m_Context.Vk.LogicalDevice, m_Context.Vk.PipelineLayout, nullptr);
 
-	vkDestroyInstance(m_Context.Vk.MainInstance, nullptr);
+	vkDestroyShaderModule (m_Context.Vk.LogicalDevice, m_Context.Vk.Modules.Vertex, nullptr);
+	vkDestroyShaderModule (m_Context.Vk.LogicalDevice, m_Context.Vk.Modules.Fragment, nullptr);
+	
+	vkDestroySwapchainKHR (m_Context.Vk.LogicalDevice, m_Context.Vk.Swapchain, nullptr);
+
+	vkDestroyDevice (m_Context.Vk.LogicalDevice, nullptr);
+	
+	vkDestroySurfaceKHR (m_Context.Vk.MainInstance, m_Context.Vk.Surface, nullptr);
+
+	vkDestroyInstance (m_Context.Vk.MainInstance, nullptr);
 }
 
 VKAPI_ATTR VkBool32 VKAPI_CALL vk_debug_callback (VkDebugUtilsMessageSeverityFlagBitsEXT message_severity,

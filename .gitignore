@@ -6,6 +6,7 @@ out
 !include/**/*[.hpp, .hxx, .h]
 
 # folders
+!assets/**/*[.glsl, .ps1]
 !Triangle/**/*[.cppm, .ixx, .cpp, .cxx, .hpp, .hxx, .c, .h]
 !TestImTerm/**/*[.cppm, .ixx, .cpp, .cxx, .hpp, .hxx, .c, .h]
 

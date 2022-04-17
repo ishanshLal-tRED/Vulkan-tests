@@ -24,6 +24,7 @@ add_executable(${THIS_EXEC}
         "src/my_app/process.cppm"
         "src/my_app/vulkan.cppm"
 
+        "src/my_app/helpers/files.ixx"
         "src/my_app/helpers/glfw.ixx"
         "src/my_app/helpers/vk.ixx"
     )

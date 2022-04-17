@@ -36,6 +36,13 @@ namespace MyApp {
 			std::vector<VkImageView> SwapchainImagesView;
 			VkFormat SwapchainImageFormat;
 			VkExtent2D SwapchainImageExtent;
+
+			struct {
+				VkShaderModule Vertex;
+				VkShaderModule Fragment;
+			} Modules;
+			
+			VkPipelineLayout PipelineLayout;
 		} Vk;
 	};
 

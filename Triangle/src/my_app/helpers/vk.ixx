@@ -40,6 +40,8 @@ namespace Helper{
 
 		void createImageViews(std::vector<VkImageView>&
 			, VkDevice&, VkFormat, std::vector<VkImage>&);
+		
+		VkShaderModule createShaderModule (VkDevice& device, const std::vector<char>& byte_code);
 	};
 
     template<bool EnableValidationLayers>
@@ -285,5 +287,18 @@ namespace Helper{
 			if (vkCreateImageView (logical_device, &create_info, nullptr, &swapchain_images_view[i]) != VK_SUCCESS)
 				THROW_Critical ("failed to create imagfe views!");
 		}
+	}
+
+	VkShaderModule createShaderModule (VkDevice& device, const std::vector<char>& byte_code) {
+		VkShaderModuleCreateInfo create_info{
+			.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+			.codeSize = byte_code.size(),
+			.pCode = reinterpret_cast<const uint32_t*>(byte_code.data())
+		};
+
+		VkShaderModule shader_module;
+		if (vkCreateShaderModule(device, &create_info, nullptr, &shader_module) != VK_SUCCESS) 
+			THROW_Critical ("failed to create shader module!");
+		return shader_module;
 	}
 };
