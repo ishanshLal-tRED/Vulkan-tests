@@ -42,6 +42,13 @@ namespace Helper{
 			, VkDevice&, VkFormat, std::vector<VkImage>&);
 		
 		VkShaderModule createShaderModule (VkDevice& device, const std::vector<char>& byte_code);
+	
+		template<int num_shader_stages> // full size means
+		void createGraphicsPipelineDefaultSize (VkPipelineLayout&, VkPipeline&
+			,VkDevice&, VkRenderPass&
+			,const VkPipelineShaderStageCreateInfo[]
+			,VkPipelineVertexInputStateCreateInfo, VkPipelineInputAssemblyStateCreateInfo
+			,VkExtent2D, const std::span<VkDynamicState>);
 	};
 
     template<bool EnableValidationLayers>
@@ -255,7 +262,7 @@ namespace Helper{
 		}
 	
 		if (vkCreateSwapchainKHR (logical_device, &swapchain_create_info, nullptr, &swapchain) != VK_SUCCESS)
-			THROW_Critical("failed to create swapchain !");
+			THROW_CORE_Critical("failed to create swapchain !");
 
 		uint32_t swapchain_images_count;
 		vkGetSwapchainImagesKHR(logical_device, swapchain, &swapchain_images_count, nullptr);
@@ -300,5 +307,121 @@ namespace Helper{
 		if (vkCreateShaderModule(device, &create_info, nullptr, &shader_module) != VK_SUCCESS) 
 			THROW_Critical ("failed to create shader module!");
 		return shader_module;
+	}
+	
+	template<int num_shader_stages>
+	void createGraphicsPipelineDefaultSize (VkPipelineLayout& pipeline_layout, VkPipeline& graphics_pipeline
+		,VkDevice& device, VkRenderPass& render_pass
+		,const VkPipelineShaderStageCreateInfo shader_stages[]
+		,VkPipelineVertexInputStateCreateInfo vertex_input_info, VkPipelineInputAssemblyStateCreateInfo input_assembly_info
+		,VkExtent2D swapchain_extent, const std::span<VkDynamicState> dynamic_states)
+	{
+		VkViewport viewport{
+			.x = 0.0f,
+			.y = 0.0f,
+			.width  = float (swapchain_extent.width),
+			.height = float (swapchain_extent.height),
+			.minDepth = 0.0f,
+			.maxDepth = 1.0f
+		};
+		VkRect2D scissor{
+			.offset = {0, 0},
+			.extent = swapchain_extent
+		};
+		VkPipelineViewportStateCreateInfo viewport_state{
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+			.viewportCount = 1,
+			.pViewports = &viewport,
+			.scissorCount = 1,
+			.pScissors = &scissor
+		};
+		constexpr bool enable_depth_clamping = false; // clamps fragments beyond near and far planes // GPU specific feature
+		VkPipelineRasterizationStateCreateInfo rasterizer {
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+			.depthClampEnable = enable_depth_clamping ? VK_TRUE : VK_FALSE,
+			.rasterizerDiscardEnable = VK_FALSE,
+			.polygonMode = VK_POLYGON_MODE_FILL,
+			.cullMode = VK_CULL_MODE_BACK_BIT,
+			.frontFace = VK_FRONT_FACE_CLOCKWISE,
+			.depthBiasEnable = VK_FALSE,
+			.depthBiasConstantFactor = 0.0f, // Optional
+			.depthBiasClamp = 0.0f, // Optional
+			.depthBiasSlopeFactor = 0.0f, // Optional
+
+			.lineWidth = 1.0f
+		};
+		VkPipelineMultisampleStateCreateInfo multisampling {
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+			.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
+			.sampleShadingEnable = VK_FALSE,
+			.minSampleShading = 1.0f, // Optional
+			.pSampleMask = nullptr, // Optional
+			.alphaToCoverageEnable = VK_FALSE, // Optional
+			.alphaToOneEnable = VK_FALSE // Optional
+		};
+		VkPipelineColorBlendAttachmentState color_blend_attachment {
+			.blendEnable = VK_FALSE,
+
+			.srcColorBlendFactor = VK_BLEND_FACTOR_ONE, // Optional
+			.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO, // Optional
+			.colorBlendOp = VK_BLEND_OP_ADD, // Optional
+			.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE, // Optional
+			.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO, // Optional
+			.alphaBlendOp = VK_BLEND_OP_ADD, // Optional
+
+			.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT
+		};
+		VkPipelineColorBlendStateCreateInfo color_blending {
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+			.logicOpEnable = VK_FALSE,
+			.logicOp = VK_LOGIC_OP_COPY, // Optional
+			.attachmentCount = 1,
+			.pAttachments = &color_blend_attachment,
+			.blendConstants = {0.0f, 0.0f, 0.0f, 0.0f} // Optional
+		};
+		
+		VkPipelineLayoutCreateInfo pipeline_layout_info {
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+			.setLayoutCount = 0, // Optional
+			.pSetLayouts = nullptr, // Optional
+			.pushConstantRangeCount = 0, // Optional
+			.pPushConstantRanges = nullptr, // Optional
+		};
+
+		if (vkCreatePipelineLayout(device, &pipeline_layout_info, nullptr, &pipeline_layout) != VK_SUCCESS) 
+			{THROW_CORE_Critical ("failed to create pipeline layout")};
+
+		VkGraphicsPipelineCreateInfo pipeline_info {
+			.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+			.stageCount = num_shader_stages,  
+			.pStages = shader_stages,  
+			.pVertexInputState = &vertex_input_info,  
+			.pInputAssemblyState = &input_assembly_info, 
+			.pViewportState = &viewport_state,  
+			.pRasterizationState = &rasterizer,  
+			.pMultisampleState = &multisampling,  
+			.pDepthStencilState = nullptr, // Optional  
+			.pColorBlendState = &color_blending,
+			.pDynamicState = nullptr, // Optional
+			.layout = pipeline_layout,
+			.renderPass = render_pass,
+			.subpass = 0,
+			.basePipelineHandle = VK_NULL_HANDLE, // Optional
+			.basePipelineIndex = -1 // Optional
+		};
+
+		VkPipelineDynamicStateCreateInfo dynamic_state;
+		if (!dynamic_states.empty ()) {// States that can be tweaked after pipeline creation // will be required to be specified at draw time
+			dynamic_state = VkPipelineDynamicStateCreateInfo {
+				.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+				.dynamicStateCount = uint32_t(dynamic_states.size()),
+				.pDynamicStates = dynamic_states.data(),
+			};
+			// Add dynamic states
+			pipeline_info.pDynamicState = &dynamic_state;
+		}
+
+		if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipeline_info, nullptr, &graphics_pipeline) != VK_SUCCESS)
+		    THROW_CORE_Critical ("failed to create graphics pipeline!");
 	}
 };

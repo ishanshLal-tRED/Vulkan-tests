@@ -16,15 +16,4 @@ int main(size_t argc, char* argv[])
     }
     MyApp::Instance::TerminateVk ();
     MyApp::Instance::Cleanup ();
-    // try {
-	// 	Default::AppInstance::InitSingleton ();
-	//     Default::AppInstance::Setup (std::span<char*>{argv, argc});
-    // 	Default::AppInstance::InitializeVk ();
-    // 	Default::AppInstance::Run ();
-    // } catch (std::exception &e) {
-	//     LOG_raw ("{:s}", e.what());
-    //     return 1;
-    // }
-    // Default::AppInstance::TerminateVk ();
-    // Default::AppInstance::Cleanup ();
 }

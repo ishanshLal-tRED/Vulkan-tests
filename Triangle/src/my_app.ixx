@@ -41,8 +41,11 @@ namespace MyApp {
 				VkShaderModule Vertex;
 				VkShaderModule Fragment;
 			} Modules;
+
+			VkRenderPass RenderPass;
 			
 			VkPipelineLayout PipelineLayout;
+			VkPipeline GraphicsPipeline;
 		} Vk;
 	};
 

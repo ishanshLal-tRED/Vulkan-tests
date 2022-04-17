@@ -12,3 +12,6 @@ Objectives:
 > cross platform <br>
 > Cpp20 <br>
 > Vulkan expertise <br>
+
+Note: <br>
+<tr> Look into older commits for more information on specifics for corresponding files (why doing somthing that way)
