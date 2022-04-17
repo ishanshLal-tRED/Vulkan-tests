@@ -49,6 +49,9 @@ namespace Helper{
 			,const VkPipelineShaderStageCreateInfo[]
 			,VkPipelineVertexInputStateCreateInfo, VkPipelineInputAssemblyStateCreateInfo
 			,VkExtent2D, const std::span<VkDynamicState>);
+		
+		void createRenderPasses (VkRenderPass&
+			,VkDevice&, VkAttachmentDescription, const std::span<VkSubpassDescription>);
 	};
 
     template<bool EnableValidationLayers>
@@ -307,6 +310,22 @@ namespace Helper{
 		if (vkCreateShaderModule(device, &create_info, nullptr, &shader_module) != VK_SUCCESS) 
 			THROW_Critical ("failed to create shader module!");
 		return shader_module;
+	}
+
+	void createRenderPasses (VkRenderPass& render_pass
+		,VkDevice& device, VkAttachmentDescription color_attachment
+		,const std::span<VkSubpassDescription> subpasses) 
+	{
+		VkRenderPassCreateInfo render_pass_info {
+			.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+			.attachmentCount = 1,
+			.pAttachments = &color_attachment,
+			.subpassCount = uint32_t(subpasses.size ()),
+			.pSubpasses = subpasses.data ()
+		};
+	
+		if (vkCreateRenderPass(device, &render_pass_info, nullptr, &render_pass) != VK_SUCCESS)
+			THROW_CORE_Critical ("failed to create render pass!");		
 	}
 	
 	template<int num_shader_stages>

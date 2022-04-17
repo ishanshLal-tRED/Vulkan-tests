@@ -131,12 +131,8 @@ void MyApp::Instance::initializeVk () {
 	Helper::createImageViews(m_Context.Vk.SwapchainImagesView, m_Context.Vk.LogicalDevice, m_Context.Vk.SwapchainImageFormat, m_Context.Vk.SwapchainImages);
 
 	{
-		VkDevice &device = m_Context.Vk.LogicalDevice;
-		VkRenderPass &render_pass = m_Context.Vk.RenderPass;
-		VkFormat &image_format = m_Context.Vk.SwapchainImageFormat,
-
 		VkAttachmentDescription color_attachment {
-			.format = image_format,
+			.format = m_Context.Vk.SwapchainImageFormat,
 			.samples = VK_SAMPLE_COUNT_1_BIT,
 			.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
 			.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
@@ -156,17 +152,11 @@ void MyApp::Instance::initializeVk () {
 			.colorAttachmentCount = 1,
 			.pColorAttachments = &color_attachment_ref
 		};
-
-		VkRenderPassCreateInfo render_pass_info {
-			.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
-			.attachmentCount = 1,
-			.pAttachments = &color_attachment,
-			.subpassCount = 1,
-			.pSubpasses = &subpass
-		};
-	
-		if (vkCreateRenderPass(device, &render_pass_info, nullptr, &render_pass) != VK_SUCCESS)
-			THROW_CORE_Critical ("failed to create render pass!");
+		
+		std::array<VkSubpassDescription, 1> subpasses = {subpass};
+		Helper::createRenderPasses (m_Context.Vk.RenderPass
+			,m_Context.Vk.LogicalDevice, color_attachment
+			,subpasses);
 	}
 
 	{ // Create Graphics Pipeline
