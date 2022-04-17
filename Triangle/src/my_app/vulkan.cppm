@@ -204,6 +204,33 @@ void MyApp::Instance::initializeVk () {
 			,vertex_input_info, input_assembly_info
 			,m_Context.Vk.SwapchainImageExtent, dynamic_states);
 	}
+
+	{ // Create framebuffers
+		const std::span<VkImageView> images_view (m_Context.Vk.SwapchainImagesView);
+		std::vector<VkFramebuffer>& framebuffers = m_Context.Vk.SwapchainFramebuffers;
+		VkRenderPass &render_pass = m_Context.Vk.RenderPass;
+		VkDevice &device = m_Context.Vk.LogicalDevice;
+		VkExtent2D extent = m_Context.Vk.SwapchainImageExtent;
+		
+		framebuffers.resize (images_view.size ());
+		for (uint32_t i = 0; i < images_view.size (); ++i) {
+			VkImageView attachment[] = { images_view[i] };
+			
+			VkFramebufferCreateInfo framebuffer_info {
+				.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+				.renderPass = render_pass,
+				.attachmentCount = 1,
+				.pAttachments = attachment,
+				.width  = extent.width,
+				.height = extent.height,
+				.layers = 1
+			};
+			
+			if (vkCreateFramebuffer(device, &framebuffer_info, nullptr, &framebuffers[i]) != VK_SUCCESS)
+			    THROW_CORE_Critical("failed to create framebuffer!");
+			
+		}
+	}
 }
 
 void MyApp::Instance::render (double latency) {
@@ -213,12 +240,8 @@ void MyApp::Instance::render (double latency) {
 void MyApp::Instance::terminateVk () {
 	LOG_trace ("{:s}", __FUNCSIG__);
 
-	if (g_EnableValidationLayers) { // Destroy Debug Utils Messenger
-		auto func = (PFN_vkDestroyDebugUtilsMessengerEXT) vkGetInstanceProcAddr(m_Context.Vk.MainInstance, "vkDestroyDebugUtilsMessengerEXT");
-		if (func != nullptr) {
-		    func(m_Context.Vk.MainInstance, m_Context.Vk.DebugMessenger, nullptr);
-		}
-	}
+	for (auto &framebuffer: m_Context.Vk.SwapchainFramebuffers) 
+		vkDestroyFramebuffer (m_Context.Vk.LogicalDevice, framebuffer, nullptr);
 
 	for (auto &image_view: m_Context.Vk.SwapchainImagesView) 
 		vkDestroyImageView (m_Context.Vk.LogicalDevice, image_view, nullptr);
@@ -234,6 +257,13 @@ void MyApp::Instance::terminateVk () {
 	vkDestroySwapchainKHR (m_Context.Vk.LogicalDevice, m_Context.Vk.Swapchain, nullptr);
 
 	vkDestroyDevice (m_Context.Vk.LogicalDevice, nullptr);
+
+	if (g_EnableValidationLayers) { // Destroy Debug Utils Messenger
+		auto func = (PFN_vkDestroyDebugUtilsMessengerEXT) vkGetInstanceProcAddr(m_Context.Vk.MainInstance, "vkDestroyDebugUtilsMessengerEXT");
+		if (func != nullptr) {
+		    func(m_Context.Vk.MainInstance, m_Context.Vk.DebugMessenger, nullptr);
+		}
+	}
 	
 	vkDestroySurfaceKHR (m_Context.Vk.MainInstance, m_Context.Vk.Surface, nullptr);
 

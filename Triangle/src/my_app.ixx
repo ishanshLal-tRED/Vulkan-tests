@@ -46,6 +46,8 @@ namespace MyApp {
 			
 			VkPipelineLayout PipelineLayout;
 			VkPipeline GraphicsPipeline;
+
+			std::vector<VkFramebuffer> SwapchainFramebuffers;
 		} Vk;
 	};
 
