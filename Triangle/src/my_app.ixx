@@ -5,10 +5,42 @@ export import MainApplication.Base;
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>;
 
+import <glm/glm.hpp>;
+
 export module MainApplication.MyApp;
 
 namespace MyApp {
 	export constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 2;
+
+	// Custom structs
+	export struct Vertex {
+		glm::vec2 position;
+		glm::vec3 color;
+
+		static constexpr VkVertexInputBindingDescription geBindingDiscription () {
+			return VkVertexInputBindingDescription {
+				.binding = 0,
+				.stride = sizeof (Vertex),
+				.inputRate = VK_VERTEX_INPUT_RATE_VERTEX
+			};
+		}
+		static constexpr std::vector<VkVertexInputAttributeDescription> getAttributeDescriptions() {
+		    return {
+				VkVertexInputAttributeDescription {
+					.location = 0,
+					.binding = 0,
+					.format = VK_FORMAT_R32G32_SFLOAT,
+					.offset = offsetof(Vertex, position),
+				}, 
+				VkVertexInputAttributeDescription {
+					.location = 1,
+					.binding = 0,
+					.format = VK_FORMAT_R32G32B32_SFLOAT,
+					.offset = offsetof(Vertex, color),
+				}
+			};
+		}
+	};
 
 	export struct Context: public Application::BaseContext {
 
@@ -58,6 +90,12 @@ namespace MyApp {
 			VkSemaphore RenderFinishedSemaphores[MAX_FRAMES_IN_FLIGHT];
 			VkSemaphore ImageAvailableSemaphores[MAX_FRAMES_IN_FLIGHT];
 			VkFence InFlightFences[MAX_FRAMES_IN_FLIGHT];
+
+			// Thie is not the place for this struct
+			struct {
+				VkBuffer VertexBuffer;
+				VkDeviceMemory VertexBufferMemory;
+			} Extras;
 		} Vk;
 	};
 
@@ -74,6 +112,8 @@ namespace MyApp {
 		void cleanupSwapchainAndRelated ();
 		void createSwapchainAndRelated ();
 		void recreateSwapchainAndRelated ();
+
+		void extras_setup () {}
 	private:
 		size_t m_CurrentFrame = 0;
 	};

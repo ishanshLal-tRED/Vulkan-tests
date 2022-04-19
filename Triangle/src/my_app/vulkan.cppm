@@ -8,6 +8,8 @@ import <set>;
 #include <limits>;
 
 import <vulkan/vulkan.h>;
+import <glm/glm.hpp>;
+
 import Helpers.Vk;
 import Helpers.GLFW;
 import Helpers.Files;
@@ -62,6 +64,16 @@ struct SwapChainSupportDetails {
 };
 SwapChainSupportDetails query_swap_chain_support(VkPhysicalDevice &device, VkSurfaceKHR &surface);
 
+static MyApp::Vertex s_TriangleVertices[] = {
+	    {glm::vec2{ 0.5, -0.5}, glm::vec3{1.0, 1.0, 1.0}}, // B  A+-----------+B 
+	    {glm::vec2{-0.5,  0.5}, glm::vec3{1.0, 1.0, 1.0}}, // D   |           | 
+	    {glm::vec2{-0.5, -0.5}, glm::vec3{1.0, 1.0, 1.0}}, // A	 D+-----------+C
+
+	    {glm::vec2{ 0.5,  0.5}, glm::vec3{1.0, 1.0, 1.0}}, // C
+	    {glm::vec2{-0.5,  0.5}, glm::vec3{1.0, 1.0, 1.0}}, // D
+	    {glm::vec2{ 0.5, -0.5}, glm::vec3{1.0, 1.0, 1.0}}, // B
+	};
+
 void MyApp::Instance::initializeVk () {
 	LOG_trace(__FUNCSIG__); 
 
@@ -88,9 +100,9 @@ void MyApp::Instance::initializeVk () {
 
 	// Create shader modules	
 	m_Context.Vk.Modules.Vertex   = Helper::createShaderModule (m_Context.Vk.LogicalDevice, 
-			Helper::readFile (std::string() + PROJECT_ROOT_LOCATION + "/assets/hardcoded_triangle/vert.sprv"));
+			Helper::readFile (std::string() + PROJECT_ROOT_LOCATION + "/assets/2d_color/vert.sprv"));
 	m_Context.Vk.Modules.Fragment = Helper::createShaderModule (m_Context.Vk.LogicalDevice, 
-			Helper::readFile (std::string() + PROJECT_ROOT_LOCATION + "/assets/hardcoded_triangle/frag.sprv"));
+			Helper::readFile (std::string() + PROJECT_ROOT_LOCATION + "/assets/2d_color/frag.sprv"));
 
 	createSwapchainAndRelated ();
 
@@ -111,6 +123,31 @@ void MyApp::Instance::initializeVk () {
 		  || vkCreateFence (m_Context.Vk.LogicalDevice, &fence_info, nullptr, &m_Context.Vk.InFlightFences[i]) != VK_SUCCESS)
 			THROW_Critical ("failed to create sync locks!");
 	}
+
+	// triangles related data
+	VkBufferCreateInfo buffer_info {
+		.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+		.size = sizeof(s_TriangleVertices),
+		.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+		.sharingMode = VK_SHARING_MODE_EXCLUSIVE
+	};
+	if (vkCreateBuffer (m_Context.Vk.LogicalDevice, &buffer_info, nullptr, &m_Context.Vk.Extras.VertexBuffer) != VK_SUCCESS) 
+		THROW_Critical ("failed to create vertex buffer");
+	VkMemoryRequirements mem_requirements;
+	vkGetBufferMemoryRequirements (m_Context.Vk.LogicalDevice, m_Context.Vk.Extras.VertexBuffer, &mem_requirements);
+	VkMemoryAllocateInfo alloc_info{
+		.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+		.allocationSize = mem_requirements.size,
+		.memoryTypeIndex = Helper::findMemoryType(m_Context.Vk.PhysicalDevice, mem_requirements.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT),
+	};
+	if (vkAllocateMemory (m_Context.Vk.LogicalDevice, &alloc_info, nullptr, &m_Context.Vk.Extras.VertexBufferMemory) != VK_SUCCESS) 
+		THROW_Critical ("failed to allocate vertex buffer memory");
+	vkBindBufferMemory (m_Context.Vk.LogicalDevice, m_Context.Vk.Extras.VertexBuffer, m_Context.Vk.Extras.VertexBufferMemory, 0);
+	void* buffer_ptr = nullptr;
+	vkMapMemory (m_Context.Vk.LogicalDevice, m_Context.Vk.Extras.VertexBufferMemory, 0, buffer_info.size, 0, &buffer_ptr);
+	memcpy (buffer_ptr, s_TriangleVertices, buffer_info.size);
+	vkUnmapMemory(m_Context.Vk.LogicalDevice, m_Context.Vk.Extras.VertexBufferMemory);
+	// memcpy_s (buffer_ptr, alloc_info.allocationSize, s_TriangleVertices, sizeof(s_TriangleVertices)); // bug in std c++ header units
 }
 
 void MyApp::Instance::render (double latency) {
@@ -119,7 +156,8 @@ void MyApp::Instance::render (double latency) {
 
 	vkWaitForFences (m_Context.Vk.LogicalDevice, 1, &m_Context.Vk.InFlightFences[current_frame_flight], VK_TRUE, UINT64_MAX);
 	
-	auto record_command_buffer = [](VkCommandBuffer& command_buffer, VkPipeline &graphics_pipeline, VkRenderPass& render_pass, VkFramebuffer &framebuffer/*uint32_t image_index*/, VkExtent2D extent) {
+	// did you notice, these struct ex. VkCommandBuffer, VkPipeline, VkRenderPass, VkFramebuffer are typdefs to a pointer to real_object, so there's no need to pass them as refrence
+	auto record_command_buffer = [](VkCommandBuffer command_buffer, VkPipeline graphics_pipeline, VkRenderPass render_pass, VkFramebuffer framebuffer, VkBuffer vertex_buffer, VkExtent2D extent) {
 		VkCommandBufferBeginInfo begin_info {
 			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
 			.flags = 0, // Optional
@@ -144,7 +182,12 @@ void MyApp::Instance::render (double latency) {
 		vkCmdBeginRenderPass(command_buffer, &render_pass_info, VK_SUBPASS_CONTENTS_INLINE);
 	
 		vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphics_pipeline);
-		vkCmdDraw(command_buffer, 3, 1, 0, 0);
+
+		VkBuffer vertex_buffers[] = {vertex_buffer};
+		VkDeviceSize offsets[] = {0};
+		vkCmdBindVertexBuffers(command_buffer, 0, 1, vertex_buffers, offsets);
+
+		vkCmdDraw(command_buffer, std::size(s_TriangleVertices) /*no. of vertices*/, 1, 0, 0);
 
 		vkCmdEndRenderPass(command_buffer);
 
@@ -166,7 +209,7 @@ void MyApp::Instance::render (double latency) {
 	vkResetFences (m_Context.Vk.LogicalDevice, 1, &m_Context.Vk.InFlightFences[current_frame_flight]);
 
 	vkResetCommandBuffer(m_Context.Vk.CommandBuffers[current_frame_flight], 0);
-	record_command_buffer(m_Context.Vk.CommandBuffers[current_frame_flight], m_Context.Vk.GraphicsPipeline, m_Context.Vk.RenderPass, m_Context.Vk.SwapchainFramebuffers[image_index], m_Context.Vk.SwapchainImageExtent);
+	record_command_buffer(m_Context.Vk.CommandBuffers[current_frame_flight], m_Context.Vk.GraphicsPipeline, m_Context.Vk.RenderPass, m_Context.Vk.SwapchainFramebuffers[image_index], m_Context.Vk.Extras.VertexBuffer, m_Context.Vk.SwapchainImageExtent);
 
 	VkSemaphore wait_semaphores[] = {m_Context.Vk.ImageAvailableSemaphores[current_frame_flight]};
 	VkPipelineStageFlags wait_stages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
@@ -203,6 +246,9 @@ void MyApp::Instance::render (double latency) {
 void MyApp::Instance::terminateVk () {
 	LOG_trace ("{:s}", __FUNCSIG__);
 	vkDeviceWaitIdle (m_Context.Vk.LogicalDevice);
+
+	vkDestroyBuffer (m_Context.Vk.LogicalDevice, m_Context.Vk.Extras.VertexBuffer, nullptr);
+	vkFreeMemory (m_Context.Vk.LogicalDevice, m_Context.Vk.Extras.VertexBufferMemory, nullptr);
 
 	vkDestroyShaderModule (m_Context.Vk.LogicalDevice, m_Context.Vk.Modules.Vertex, nullptr);
 	vkDestroyShaderModule (m_Context.Vk.LogicalDevice, m_Context.Vk.Modules.Fragment, nullptr);
@@ -245,6 +291,7 @@ void MyApp::Instance::cleanupSwapchainAndRelated () {
 	
 	vkDestroySwapchainKHR (m_Context.Vk.LogicalDevice, m_Context.Vk.Swapchain, nullptr);
 }
+
 void MyApp::Instance::createSwapchainAndRelated () {
 	const QueueFamilyIndices queue_family_indices (m_Context.Vk.PhysicalDevice, m_Context.Vk.Surface);
 
@@ -337,12 +384,15 @@ void MyApp::Instance::createSwapchainAndRelated () {
 		};
 		VkPipelineShaderStageCreateInfo shader_stages[] = {vert_shader_stage_info, frag_shader_stage_info};
 		
+		auto bindingDescription = Vertex::geBindingDiscription();
+		auto attributeDescriptions = Vertex::getAttributeDescriptions();
+			
 		VkPipelineVertexInputStateCreateInfo vertex_input_info {
 			.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-			.vertexBindingDescriptionCount = 0,
-			.pVertexBindingDescriptions = nullptr, // Optional
-			.vertexAttributeDescriptionCount = 0,
-			.pVertexAttributeDescriptions = nullptr // Optional
+			.vertexBindingDescriptionCount = 1,
+			.pVertexBindingDescriptions = &bindingDescription, // Optional
+			.vertexAttributeDescriptionCount = 2,
+			.pVertexAttributeDescriptions = attributeDescriptions.data () // Optional
 		};
 		VkPipelineInputAssemblyStateCreateInfo input_assembly_info {
 			.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,

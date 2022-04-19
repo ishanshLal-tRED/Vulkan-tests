@@ -59,6 +59,8 @@ namespace Helper{
 		
 		void createCommandPoolAndBuffer (VkCommandPool&, std::span<VkCommandBuffer>
 			,VkDevice&, uint32_t);
+
+		uint32_t findMemoryType (VkPhysicalDevice&, uint32_t, VkMemoryPropertyFlags);
 	};
 
     template<bool EnableValidationLayers>
@@ -310,7 +312,7 @@ namespace Helper{
 		VkShaderModuleCreateInfo create_info{
 			.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
 			.codeSize = byte_code.size(),
-			.pCode = reinterpret_cast<const uint32_t*>(byte_code.data())
+			.pCode = (const uint32_t*)(byte_code.data()) // should be aligned as (uint32_t);
 		};
 
 		VkShaderModule shader_module;
@@ -510,5 +512,19 @@ namespace Helper{
 		if (vkAllocateCommandBuffers(device, &alloc_info, command_buffers.data ()) != VK_SUCCESS) {
 		    THROW_CORE_Critical ("failed to allocate command buffers!");
 		}
+	}
+
+	uint32_t findMemoryType (VkPhysicalDevice& physical_device, uint32_t type_filter
+		, VkMemoryPropertyFlags properties) 
+	{
+		VkPhysicalDeviceMemoryProperties mem_properties;
+		vkGetPhysicalDeviceMemoryProperties (physical_device, &mem_properties);
+		
+		for (uint32_t i = 0; i < mem_properties.memoryTypeCount; ++i)
+			if ( (type_filter & (1 << i)) && 
+				((mem_properties.memoryTypes[i].propertyFlags & properties) == properties) )
+				return i;
+		
+		THROW_Critical ("failed to find suitable memory type");
 	}
 };
