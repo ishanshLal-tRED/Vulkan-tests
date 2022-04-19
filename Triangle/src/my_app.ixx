@@ -95,6 +95,8 @@ namespace MyApp {
 			struct {
 				VkBuffer VertexBuffer;
 				VkDeviceMemory VertexBufferMemory;
+				VkBuffer IndexBuffer;
+				VkDeviceMemory IndexBufferMemory;
 			} Extras;
 		} Vk;
 	};
@@ -113,7 +115,7 @@ namespace MyApp {
 		void create_swapchain_and_related ();
 		void recreate_swapchain_and_related ();
 
-		void create_vertex_buffer ();
+		void create_buffers ();
 	private:
 		size_t m_CurrentFrame = 0;
 	};

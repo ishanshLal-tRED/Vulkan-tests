@@ -62,17 +62,16 @@ struct SwapChainSupportDetails {
     std::vector<VkSurfaceFormatKHR> formats;
     std::vector<VkPresentModeKHR> presentModes;
 };
-SwapChainSupportDetails query_swap_chain_support(VkPhysicalDevice device, VkSurfaceKHR surface);
+SwapChainSupportDetails query_swap_chain_support (VkPhysicalDevice device, VkSurfaceKHR surface);
 
 static MyApp::Vertex s_TriangleVertices[] = {
-	    {glm::vec2{ 0.5, -0.5}, glm::vec3{1.0, 1.0, 1.0}}, // B  A+-----------+B 
-	    {glm::vec2{-0.5,  0.5}, glm::vec3{1.0, 1.0, 1.0}}, // D   |           | 
-	    {glm::vec2{-0.5, -0.5}, glm::vec3{1.0, 1.0, 1.0}}, // A	 D+-----------+C
-
-	    {glm::vec2{ 0.5,  0.5}, glm::vec3{1.0, 1.0, 1.0}}, // C
+	    {glm::vec2{-0.5, -0.5}, glm::vec3{1.0, 0.0, 1.0}}, // A  A+-----------+B	
+	    {glm::vec2{ 0.5, -0.5}, glm::vec3{0.0, 1.0, 1.0}}, // B   |           |  
+	    {glm::vec2{ 0.5,  0.5}, glm::vec3{1.0, 1.0, 0.0}}, // C  D+-----------+C
 	    {glm::vec2{-0.5,  0.5}, glm::vec3{1.0, 1.0, 1.0}}, // D
-	    {glm::vec2{ 0.5, -0.5}, glm::vec3{1.0, 1.0, 1.0}}, // B
 	};
+
+static uint16_t s_TriangleIndices[] = {1, 3, 0, /**/ 2, 3, 1};
 
 void MyApp::Instance::initializeVk () {
 	LOG_trace(__FUNCSIG__); 
@@ -124,7 +123,7 @@ void MyApp::Instance::initializeVk () {
 			THROW_Critical ("failed to create sync locks!");
 	}
 
-	create_vertex_buffer ();
+	create_buffers ();
 }
 
 void MyApp::Instance::render (double latency) {
@@ -134,7 +133,10 @@ void MyApp::Instance::render (double latency) {
 	vkWaitForFences (m_Context.Vk.LogicalDevice, 1, &m_Context.Vk.InFlightFences[current_frame_flight], VK_TRUE, UINT64_MAX);
 	
 	// did you notice, these struct ex. VkCommandBuffer, VkPipeline, VkRenderPass, VkFramebuffer are typdefs to a pointer to real_object, so there's no need to pass them as refrence
-	auto record_command_buffer = [](VkCommandBuffer command_buffer, VkPipeline graphics_pipeline, VkRenderPass render_pass, VkFramebuffer framebuffer, VkBuffer vertex_buffer, VkExtent2D extent) {
+	auto record_command_buffer = [](VkCommandBuffer command_buffer
+			, VkPipeline graphics_pipeline, VkRenderPass render_pass, VkFramebuffer framebuffer
+			, VkBuffer vertex_buffer, VkBuffer index_buffer, VkExtent2D extent) 
+	{
 		VkCommandBufferBeginInfo begin_info {
 			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
 			.flags = 0, // Optional
@@ -162,18 +164,19 @@ void MyApp::Instance::render (double latency) {
 
 		VkBuffer vertex_buffers[] = {vertex_buffer};
 		VkDeviceSize offsets[] = {0};
-		vkCmdBindVertexBuffers(command_buffer, 0, 1, vertex_buffers, offsets);
+		vkCmdBindVertexBuffers (command_buffer, 0, 1, vertex_buffers, offsets);
+		vkCmdBindIndexBuffer (command_buffer, index_buffer, 0, VK_INDEX_TYPE_UINT16);
 
-		vkCmdDraw(command_buffer, std::size(s_TriangleVertices) /*no. of vertices*/, 1, 0, 0);
+ 		vkCmdDrawIndexed (command_buffer, std::size(s_TriangleIndices) /*no. of vertices*/, 1, 0, 0, 0);
 
-		vkCmdEndRenderPass(command_buffer);
+		vkCmdEndRenderPass (command_buffer);
 
-		if (vkEndCommandBuffer(command_buffer) != VK_SUCCESS)
+		if (vkEndCommandBuffer (command_buffer) != VK_SUCCESS)
 		    THROW_Critical("failed to record command buffer!");
 	};
 	
 	uint32_t image_index;
-    switch(vkAcquireNextImageKHR(m_Context.Vk.LogicalDevice, m_Context.Vk.Swapchain, UINT64_MAX, m_Context.Vk.ImageAvailableSemaphores[current_frame_flight], VK_NULL_HANDLE, &image_index)) {
+    switch (vkAcquireNextImageKHR(m_Context.Vk.LogicalDevice, m_Context.Vk.Swapchain, UINT64_MAX, m_Context.Vk.ImageAvailableSemaphores[current_frame_flight], VK_NULL_HANDLE, &image_index)) {
 		case VK_SUCCESS: break;
 		case VK_ERROR_OUT_OF_DATE_KHR:			
 		case VK_SUBOPTIMAL_KHR: // Recreate swapchain and related
@@ -186,7 +189,7 @@ void MyApp::Instance::render (double latency) {
 	vkResetFences (m_Context.Vk.LogicalDevice, 1, &m_Context.Vk.InFlightFences[current_frame_flight]);
 
 	vkResetCommandBuffer(m_Context.Vk.CommandBuffers[current_frame_flight], 0);
-	record_command_buffer(m_Context.Vk.CommandBuffers[current_frame_flight], m_Context.Vk.GraphicsPipeline, m_Context.Vk.RenderPass, m_Context.Vk.SwapchainFramebuffers[image_index], m_Context.Vk.Extras.VertexBuffer, m_Context.Vk.SwapchainImageExtent);
+	record_command_buffer(m_Context.Vk.CommandBuffers[current_frame_flight], m_Context.Vk.GraphicsPipeline, m_Context.Vk.RenderPass, m_Context.Vk.SwapchainFramebuffers[image_index], m_Context.Vk.Extras.VertexBuffer, m_Context.Vk.Extras.IndexBuffer, m_Context.Vk.SwapchainImageExtent);
 
 	VkSemaphore wait_semaphores[] = {m_Context.Vk.ImageAvailableSemaphores[current_frame_flight]};
 	VkPipelineStageFlags wait_stages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
@@ -226,6 +229,8 @@ void MyApp::Instance::terminateVk () {
 
 	vkDestroyBuffer (m_Context.Vk.LogicalDevice, m_Context.Vk.Extras.VertexBuffer, nullptr);
 	vkFreeMemory (m_Context.Vk.LogicalDevice, m_Context.Vk.Extras.VertexBufferMemory, nullptr);
+	vkDestroyBuffer (m_Context.Vk.LogicalDevice, m_Context.Vk.Extras.IndexBuffer, nullptr);
+	vkFreeMemory (m_Context.Vk.LogicalDevice, m_Context.Vk.Extras.IndexBufferMemory, nullptr);
 
 	vkDestroyShaderModule (m_Context.Vk.LogicalDevice, m_Context.Vk.Modules.Vertex, nullptr);
 	vkDestroyShaderModule (m_Context.Vk.LogicalDevice, m_Context.Vk.Modules.Fragment, nullptr);
@@ -403,38 +408,65 @@ void MyApp::Instance::recreate_swapchain_and_related () {
 	create_swapchain_and_related ();
 }
 
-void MyApp::Instance::create_vertex_buffer () {
-	// triangles related
-	VkDeviceSize buffer_size = sizeof(s_TriangleVertices);
+void MyApp::Instance::create_buffers () {
+	{ // vertex buffer for triangles
+		VkDeviceSize buffer_size = sizeof(s_TriangleVertices);
 
-	VkBuffer staging_buffer;
-	VkDeviceMemory staging_buffer_memory;
-	Helper::createBuffer (staging_buffer, staging_buffer_memory
-		,m_Context.Vk.LogicalDevice, m_Context.Vk.PhysicalDevice, buffer_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT
-		,VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-	
-	void* staging_buffer_ptr = nullptr;
-	vkMapMemory (m_Context.Vk.LogicalDevice, staging_buffer_memory, 0, buffer_size, 0, &staging_buffer_ptr);
-	memcpy (staging_buffer_ptr, s_TriangleVertices, buffer_size);
-	vkUnmapMemory(m_Context.Vk.LogicalDevice, staging_buffer_memory);
-	// memcpy_s (buffer_ptr, alloc_info.allocationSize, s_TriangleVertices, sizeof(s_TriangleVertices)); // bug in microsoft stl header units
+		VkBuffer staging_buffer;
+		VkDeviceMemory staging_buffer_memory;
+		Helper::createBuffer (staging_buffer, staging_buffer_memory
+			,m_Context.Vk.LogicalDevice, m_Context.Vk.PhysicalDevice, buffer_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT
+			,VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+		
+		void* staging_buffer_ptr = nullptr;
+		vkMapMemory (m_Context.Vk.LogicalDevice, staging_buffer_memory, 0, buffer_size, 0, &staging_buffer_ptr);
+		memcpy (staging_buffer_ptr, s_TriangleVertices, buffer_size);
+		vkUnmapMemory(m_Context.Vk.LogicalDevice, staging_buffer_memory);
+		// memcpy_s (buffer_ptr, alloc_info.allocationSize, s_TriangleVertices, sizeof(s_TriangleVertices)); // bug in microsoft stl header units
 
-	Helper::createBuffer (m_Context.Vk.Extras.VertexBuffer, m_Context.Vk.Extras.VertexBufferMemory
-		,m_Context.Vk.LogicalDevice, m_Context.Vk.PhysicalDevice, buffer_size
-		,VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT
-		,VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+		Helper::createBuffer (m_Context.Vk.Extras.VertexBuffer, m_Context.Vk.Extras.VertexBufferMemory
+			,m_Context.Vk.LogicalDevice, m_Context.Vk.PhysicalDevice, buffer_size
+			,VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT
+			,VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
-	Helper::copyBuffer_s (m_Context.Vk.Extras.VertexBuffer, staging_buffer
-		,buffer_size, m_Context.Vk.LogicalDevice, m_Context.Vk.CommandPool, m_Context.Vk.Queues.Graphics);
+		Helper::copyBuffer_s (m_Context.Vk.Extras.VertexBuffer, staging_buffer
+			,buffer_size, m_Context.Vk.LogicalDevice, m_Context.Vk.CommandPool, m_Context.Vk.Queues.Graphics);
 
-	vkDestroyBuffer (m_Context.Vk.LogicalDevice, staging_buffer, nullptr);
-    vkFreeMemory (m_Context.Vk.LogicalDevice, staging_buffer_memory, nullptr);
+		vkDestroyBuffer (m_Context.Vk.LogicalDevice, staging_buffer, nullptr);
+		vkFreeMemory (m_Context.Vk.LogicalDevice, staging_buffer_memory, nullptr);
+	}
+	{ // index buffer for triangles
+		VkDeviceSize buffer_size = sizeof(s_TriangleIndices);
+
+		VkBuffer staging_buffer;
+		VkDeviceMemory staging_buffer_memory;
+		Helper::createBuffer (staging_buffer, staging_buffer_memory
+			,m_Context.Vk.LogicalDevice, m_Context.Vk.PhysicalDevice, buffer_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT
+			,VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+		
+		void* staging_buffer_ptr = nullptr;
+		vkMapMemory (m_Context.Vk.LogicalDevice, staging_buffer_memory, 0, buffer_size, 0, &staging_buffer_ptr);
+		memcpy (staging_buffer_ptr, s_TriangleIndices, buffer_size);
+		vkUnmapMemory(m_Context.Vk.LogicalDevice, staging_buffer_memory);
+		// memcpy_s (buffer_ptr, alloc_info.allocationSize, s_TriangleVertices, sizeof(s_TriangleVertices)); // bug in microsoft stl header units
+
+		Helper::createBuffer (m_Context.Vk.Extras.IndexBuffer, m_Context.Vk.Extras.IndexBufferMemory
+			,m_Context.Vk.LogicalDevice, m_Context.Vk.PhysicalDevice, buffer_size
+			,VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT
+			,VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+		Helper::copyBuffer_s (m_Context.Vk.Extras.IndexBuffer, staging_buffer
+			,buffer_size, m_Context.Vk.LogicalDevice, m_Context.Vk.CommandPool, m_Context.Vk.Queues.Graphics);
+
+		vkDestroyBuffer (m_Context.Vk.LogicalDevice, staging_buffer, nullptr);
+		vkFreeMemory (m_Context.Vk.LogicalDevice, staging_buffer_memory, nullptr);
+	}
 }
 
-VKAPI_ATTR VkBool32 VKAPI_CALL vk_debug_callback (VkDebugUtilsMessageSeverityFlagBitsEXT message_severity,
-	VkDebugUtilsMessageTypeFlagsEXT message_type,
-	const VkDebugUtilsMessengerCallbackDataEXT* callback_data,
-	void* pUserData) 
+VKAPI_ATTR VkBool32 VKAPI_CALL vk_debug_callback (VkDebugUtilsMessageSeverityFlagBitsEXT message_severity
+	,VkDebugUtilsMessageTypeFlagsEXT message_type
+	,const VkDebugUtilsMessengerCallbackDataEXT* callback_data
+	,void* pUserData) 
 {
 	std::string msg_type;
 	if (message_type & VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT) {
