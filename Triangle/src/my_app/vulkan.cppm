@@ -28,10 +28,10 @@ VKAPI_ATTR VkBool32 VKAPI_CALL vk_debug_callback (
 	VkDebugUtilsMessageSeverityFlagBitsEXT,VkDebugUtilsMessageTypeFlagsEXT,
 	const VkDebugUtilsMessengerCallbackDataEXT*, void*);
 
-bool is_vk_device_suitable (VkPhysicalDevice &device, void* surface_ptr);
+bool is_vk_device_suitable (VkPhysicalDevice device, void* surface_ptr);
 
 struct QueueFamilyIndices {
-	QueueFamilyIndices (VkPhysicalDevice &device, VkSurfaceKHR &surface) {
+	QueueFamilyIndices (VkPhysicalDevice device, VkSurfaceKHR surface) {
 		// Find required queue families
 		uint32_t queue_family_count = 0;
 		vkGetPhysicalDeviceQueueFamilyProperties(device, &queue_family_count, nullptr);
@@ -62,7 +62,7 @@ struct SwapChainSupportDetails {
     std::vector<VkSurfaceFormatKHR> formats;
     std::vector<VkPresentModeKHR> presentModes;
 };
-SwapChainSupportDetails query_swap_chain_support(VkPhysicalDevice &device, VkSurfaceKHR &surface);
+SwapChainSupportDetails query_swap_chain_support(VkPhysicalDevice device, VkSurfaceKHR surface);
 
 static MyApp::Vertex s_TriangleVertices[] = {
 	    {glm::vec2{ 0.5, -0.5}, glm::vec3{1.0, 1.0, 1.0}}, // B  A+-----------+B 
@@ -104,7 +104,7 @@ void MyApp::Instance::initializeVk () {
 	m_Context.Vk.Modules.Fragment = Helper::createShaderModule (m_Context.Vk.LogicalDevice, 
 			Helper::readFile (std::string() + PROJECT_ROOT_LOCATION + "/assets/2d_color/frag.sprv"));
 
-	createSwapchainAndRelated ();
+	create_swapchain_and_related ();
 
 	// Create command pool & buffer
 	Helper::createCommandPoolAndBuffer (m_Context.Vk.CommandPool, m_Context.Vk.CommandBuffers
@@ -124,30 +124,7 @@ void MyApp::Instance::initializeVk () {
 			THROW_Critical ("failed to create sync locks!");
 	}
 
-	// triangles related data
-	VkBufferCreateInfo buffer_info {
-		.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-		.size = sizeof(s_TriangleVertices),
-		.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-		.sharingMode = VK_SHARING_MODE_EXCLUSIVE
-	};
-	if (vkCreateBuffer (m_Context.Vk.LogicalDevice, &buffer_info, nullptr, &m_Context.Vk.Extras.VertexBuffer) != VK_SUCCESS) 
-		THROW_Critical ("failed to create vertex buffer");
-	VkMemoryRequirements mem_requirements;
-	vkGetBufferMemoryRequirements (m_Context.Vk.LogicalDevice, m_Context.Vk.Extras.VertexBuffer, &mem_requirements);
-	VkMemoryAllocateInfo alloc_info{
-		.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-		.allocationSize = mem_requirements.size,
-		.memoryTypeIndex = Helper::findMemoryType(m_Context.Vk.PhysicalDevice, mem_requirements.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT),
-	};
-	if (vkAllocateMemory (m_Context.Vk.LogicalDevice, &alloc_info, nullptr, &m_Context.Vk.Extras.VertexBufferMemory) != VK_SUCCESS) 
-		THROW_Critical ("failed to allocate vertex buffer memory");
-	vkBindBufferMemory (m_Context.Vk.LogicalDevice, m_Context.Vk.Extras.VertexBuffer, m_Context.Vk.Extras.VertexBufferMemory, 0);
-	void* buffer_ptr = nullptr;
-	vkMapMemory (m_Context.Vk.LogicalDevice, m_Context.Vk.Extras.VertexBufferMemory, 0, buffer_info.size, 0, &buffer_ptr);
-	memcpy (buffer_ptr, s_TriangleVertices, buffer_info.size);
-	vkUnmapMemory(m_Context.Vk.LogicalDevice, m_Context.Vk.Extras.VertexBufferMemory);
-	// memcpy_s (buffer_ptr, alloc_info.allocationSize, s_TriangleVertices, sizeof(s_TriangleVertices)); // bug in std c++ header units
+	create_vertex_buffer ();
 }
 
 void MyApp::Instance::render (double latency) {
@@ -200,7 +177,7 @@ void MyApp::Instance::render (double latency) {
 		case VK_SUCCESS: break;
 		case VK_ERROR_OUT_OF_DATE_KHR:			
 		case VK_SUBOPTIMAL_KHR: // Recreate swapchain and related
-			recreateSwapchainAndRelated ();
+			recreate_swapchain_and_related ();
 			return;
 		default:
 			THROW_Critical ("failed to acquire swapchain image");
@@ -253,7 +230,7 @@ void MyApp::Instance::terminateVk () {
 	vkDestroyShaderModule (m_Context.Vk.LogicalDevice, m_Context.Vk.Modules.Vertex, nullptr);
 	vkDestroyShaderModule (m_Context.Vk.LogicalDevice, m_Context.Vk.Modules.Fragment, nullptr);
 
-	cleanupSwapchainAndRelated ();
+	cleanup_swapchain_and_related ();
 
 	for (int  i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
 		vkDestroySemaphore (m_Context.Vk.LogicalDevice, m_Context.Vk.ImageAvailableSemaphores[i], nullptr);
@@ -277,7 +254,7 @@ void MyApp::Instance::terminateVk () {
 	vkDestroyInstance (m_Context.Vk.MainInstance, nullptr);
 }
 
-void MyApp::Instance::cleanupSwapchainAndRelated () {
+void MyApp::Instance::cleanup_swapchain_and_related () {
 	for (auto &framebuffer: m_Context.Vk.SwapchainFramebuffers) 
 		vkDestroyFramebuffer (m_Context.Vk.LogicalDevice, framebuffer, nullptr);
 
@@ -292,7 +269,7 @@ void MyApp::Instance::cleanupSwapchainAndRelated () {
 	vkDestroySwapchainKHR (m_Context.Vk.LogicalDevice, m_Context.Vk.Swapchain, nullptr);
 }
 
-void MyApp::Instance::createSwapchainAndRelated () {
+void MyApp::Instance::create_swapchain_and_related () {
 	const QueueFamilyIndices queue_family_indices (m_Context.Vk.PhysicalDevice, m_Context.Vk.Surface);
 
 	// Swapchain related data extraction
@@ -419,11 +396,39 @@ void MyApp::Instance::createSwapchainAndRelated () {
 		,m_Context.Vk.SwapchainImageExtent);
 }
 
-void MyApp::Instance::recreateSwapchainAndRelated () {
+void MyApp::Instance::recreate_swapchain_and_related () {
 	LOG_trace (__FUNCSIG__);
 	vkDeviceWaitIdle (m_Context.Vk.LogicalDevice);
-	cleanupSwapchainAndRelated ();
-	createSwapchainAndRelated ();
+	cleanup_swapchain_and_related ();
+	create_swapchain_and_related ();
+}
+
+void MyApp::Instance::create_vertex_buffer () {
+	// triangles related
+	VkDeviceSize buffer_size = sizeof(s_TriangleVertices);
+
+	VkBuffer staging_buffer;
+	VkDeviceMemory staging_buffer_memory;
+	Helper::createBuffer (staging_buffer, staging_buffer_memory
+		,m_Context.Vk.LogicalDevice, m_Context.Vk.PhysicalDevice, buffer_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT
+		,VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+	
+	void* staging_buffer_ptr = nullptr;
+	vkMapMemory (m_Context.Vk.LogicalDevice, staging_buffer_memory, 0, buffer_size, 0, &staging_buffer_ptr);
+	memcpy (staging_buffer_ptr, s_TriangleVertices, buffer_size);
+	vkUnmapMemory(m_Context.Vk.LogicalDevice, staging_buffer_memory);
+	// memcpy_s (buffer_ptr, alloc_info.allocationSize, s_TriangleVertices, sizeof(s_TriangleVertices)); // bug in microsoft stl header units
+
+	Helper::createBuffer (m_Context.Vk.Extras.VertexBuffer, m_Context.Vk.Extras.VertexBufferMemory
+		,m_Context.Vk.LogicalDevice, m_Context.Vk.PhysicalDevice, buffer_size
+		,VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT
+		,VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+	Helper::copyBuffer_s (m_Context.Vk.Extras.VertexBuffer, staging_buffer
+		,buffer_size, m_Context.Vk.LogicalDevice, m_Context.Vk.CommandPool, m_Context.Vk.Queues.Graphics);
+
+	vkDestroyBuffer (m_Context.Vk.LogicalDevice, staging_buffer, nullptr);
+    vkFreeMemory (m_Context.Vk.LogicalDevice, staging_buffer_memory, nullptr);
 }
 
 VKAPI_ATTR VkBool32 VKAPI_CALL vk_debug_callback (VkDebugUtilsMessageSeverityFlagBitsEXT message_severity,
@@ -462,8 +467,8 @@ VKAPI_ATTR VkBool32 VKAPI_CALL vk_debug_callback (VkDebugUtilsMessageSeverityFla
 	return VK_FALSE;
 };
 
-bool is_vk_device_suitable (VkPhysicalDevice &device, void* surface_ptr) {
-	VkSurfaceKHR &surface = *(VkSurfaceKHR*)(surface_ptr);
+bool is_vk_device_suitable (VkPhysicalDevice device, void* surface_ptr) {
+	VkSurfaceKHR surface = *(VkSurfaceKHR*)(surface_ptr);
 	// We culd also implement a rating system for selecting most powerful GPU in system
 
 	VkPhysicalDeviceProperties device_properties;
@@ -474,7 +479,7 @@ bool is_vk_device_suitable (VkPhysicalDevice &device, void* surface_ptr) {
 
 	const QueueFamilyIndices indices (device, surface);
 
-	auto check_device_extensions_support = [](VkPhysicalDevice &device) {
+	auto check_device_extensions_support = [](VkPhysicalDevice device) {
 			uint32_t extension_count;
 			vkEnumerateDeviceExtensionProperties (device, nullptr, &extension_count, nullptr);
 			std::vector<VkExtensionProperties> properties(extension_count);
@@ -506,7 +511,7 @@ bool is_vk_device_suitable (VkPhysicalDevice &device, void* surface_ptr) {
 	;
 }
 
-SwapChainSupportDetails query_swap_chain_support(VkPhysicalDevice &device, VkSurfaceKHR &surface) {
+SwapChainSupportDetails query_swap_chain_support(VkPhysicalDevice device, VkSurfaceKHR surface) {
     SwapChainSupportDetails details;
 	vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface, &details.capabilities);
 	

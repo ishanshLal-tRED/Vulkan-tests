@@ -21,7 +21,7 @@ void MyApp::Instance::setup (const std::span<char*> &argument_list) {
 
 	auto framebuffer_resize_callback = [](GLFWwindow* window, int width, int height) {
 			auto app_instance = (MyApp::Instance*)(glfwGetWindowUserPointer(window));
-			app_instance->recreateSwapchainAndRelated ();
+			app_instance->recreate_swapchain_and_related ();
 		};
 
 	if (m_Context.MainWindow == nullptr){

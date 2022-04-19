@@ -13,60 +13,67 @@ export module Helpers.Vk;
 namespace Helper{
 	export {
 		template<bool EnableValidationLayers = true>
-		void createInstance(VkInstance&, VkDebugUtilsMessengerEXT&
-			, VkApplicationInfo, const std::span<const char*>,
+		void createInstance (VkInstance&, VkDebugUtilsMessengerEXT&
+			,VkApplicationInfo, const std::span<const char*>,
 			VkBool32 (VKAPI_PTR *f)(
 				VkDebugUtilsMessageSeverityFlagBitsEXT,VkDebugUtilsMessageTypeFlagsEXT,
 			    const VkDebugUtilsMessengerCallbackDataEXT*,void*));
 
-		void setupDebugMessenger(VkDebugUtilsMessengerEXT&
-			, VkInstance&, VkDebugUtilsMessengerCreateInfoEXT&,
+		void setupDebugMessenger (VkDebugUtilsMessengerEXT&
+			,VkInstance, VkDebugUtilsMessengerCreateInfoEXT&,
 			VkBool32 (VKAPI_PTR *f)(
 				VkDebugUtilsMessageSeverityFlagBitsEXT, VkDebugUtilsMessageTypeFlagsEXT,
 			    const VkDebugUtilsMessengerCallbackDataEXT*,void*));
 
-		void createSurface(VkSurfaceKHR&, VkInstance&,  HWND, HINSTANCE hinstance = GetModuleHandle(nullptr));
+		void createSurface (VkSurfaceKHR&
+			,VkInstance, HWND, HINSTANCE hinstance = GetModuleHandle(nullptr));
 
-		VkPhysicalDevice pickPhysicalDevice(VkInstance&, bool (*f)(VkPhysicalDevice&, void*), void*);
+		VkPhysicalDevice pickPhysicalDevice (VkInstance, bool (*f)(VkPhysicalDevice, void*), void*);
 
 		template<bool EnableValidationLayers = true>
-		void createLogicalDevice(VkDevice&
-			, VkPhysicalDevice&, std::vector<std::pair<VkQueue*, uint32_t>>
-			, const std::span<const char*>, const std::span<const char*>);
+		void createLogicalDevice (VkDevice&
+			,VkPhysicalDevice, std::vector<std::pair<VkQueue*, uint32_t>>
+			,const std::span<const char*>, const std::span<const char*>);
 
-		void createSwapChain (VkSwapchainKHR&, std::vector<VkImage>&, VkSurfaceKHR&, VkDevice&
-			, VkSurfaceCapabilitiesKHR, VkExtent2D, VkSurfaceFormatKHR, VkPresentModeKHR
-			, uint32_t, uint32_t);
+		void createSwapChain (VkSwapchainKHR&, std::vector<VkImage>&
+			,VkSurfaceKHR, VkDevice, VkSurfaceCapabilitiesKHR, VkExtent2D
+			,VkSurfaceFormatKHR, VkPresentModeKHR, uint32_t, uint32_t);
 
-		void createImageViews(std::vector<VkImageView>&
-			, VkDevice&, VkFormat, std::vector<VkImage>&);
+		void createImageViews (std::vector<VkImageView>&
+			, VkDevice, VkFormat, std::vector<VkImage>&);
 		
-		VkShaderModule createShaderModule (VkDevice& device, const std::vector<char>& byte_code);
+		VkShaderModule createShaderModule (VkDevice device, const std::vector<char>& byte_code);
 	
 		template<int num_shader_stages> // full size means
 		void createGraphicsPipelineDefaultSize (VkPipelineLayout&, VkPipeline&
-			,VkDevice&, VkRenderPass&
+			,VkDevice, VkRenderPass
 			,const VkPipelineShaderStageCreateInfo[]
 			,VkPipelineVertexInputStateCreateInfo, VkPipelineInputAssemblyStateCreateInfo
 			,VkExtent2D, const std::span<VkDynamicState>);
 		
 		void createRenderPasses (VkRenderPass&
-			,VkDevice&, VkAttachmentDescription, const std::span<VkSubpassDescription>);
+			,VkDevice, VkAttachmentDescription, const std::span<VkSubpassDescription>);
 
 		void createFramebuffers (std::vector<VkFramebuffer>&
-			,VkDevice&, VkRenderPass&, const std::span<VkImageView>
+			,VkDevice, VkRenderPass, const std::span<VkImageView>
 			,VkExtent2D);
 		
 		void createCommandPoolAndBuffer (VkCommandPool&, std::span<VkCommandBuffer>
-			,VkDevice&, uint32_t);
+			,VkDevice, uint32_t);
 
-		uint32_t findMemoryType (VkPhysicalDevice&, uint32_t, VkMemoryPropertyFlags);
+		uint32_t findMemoryType (VkPhysicalDevice, uint32_t, VkMemoryPropertyFlags);
+
+		void createBuffer (VkBuffer&, VkDeviceMemory&
+			,VkDevice, VkPhysicalDevice, VkDeviceSize, VkBufferUsageFlags, VkMemoryPropertyFlags);
+
+		void copyBuffer_s (VkBuffer&
+			,VkBuffer, VkDeviceSize, VkDevice, VkCommandPool, VkQueue);
 	};
 
     template<bool EnableValidationLayers>
-	void createInstance(VkInstance &instance, VkDebugUtilsMessengerEXT& debug_messenger
-		, VkApplicationInfo app_info, std::span<const char*> req_validation_layers
-		, VkBool32 (VKAPI_PTR *vk_debug_callback)(
+	void createInstance (VkInstance& instance, VkDebugUtilsMessengerEXT& debug_messenger
+		,VkApplicationInfo app_info, std::span<const char*> req_validation_layers
+		,VkBool32 (VKAPI_PTR *vk_debug_callback)(
 			VkDebugUtilsMessageSeverityFlagBitsEXT, VkDebugUtilsMessageTypeFlagsEXT,
 		    const VkDebugUtilsMessengerCallbackDataEXT*,void*) ) 
 	{
@@ -145,9 +152,9 @@ namespace Helper{
 		}
     }
 
-    void setupDebugMessenger (VkDebugUtilsMessengerEXT &debug_messenger
-		, VkInstance &instance, VkDebugUtilsMessengerCreateInfoEXT &debug_messenger_info
-		, VkBool32 (VKAPI_PTR *vk_debug_callback)(
+    void setupDebugMessenger (VkDebugUtilsMessengerEXT& debug_messenger
+		,VkInstance instance, VkDebugUtilsMessengerCreateInfoEXT &debug_messenger_info
+		,VkBool32 (VKAPI_PTR *vk_debug_callback)(
 			VkDebugUtilsMessageSeverityFlagBitsEXT, VkDebugUtilsMessageTypeFlagsEXT,
 		    const VkDebugUtilsMessengerCallbackDataEXT*,void*))
 	{
@@ -160,8 +167,8 @@ namespace Helper{
 			THROW_CORE_Critical("failed setting up vk_debug_messenger");
 	}
 
-    void createSurface(VkSurfaceKHR &surface
-		, VkInstance &instance, HWND window_handle, HINSTANCE hinstance) 
+    void createSurface(VkSurfaceKHR& surface
+		,VkInstance instance, HWND window_handle, HINSTANCE hinstance) 
 	{
 		VkWin32SurfaceCreateInfoKHR surface_info{
 			.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR,
@@ -173,8 +180,8 @@ namespace Helper{
 			THROW_CORE_Critical("failed to create window surface");
 	}
 
-    VkPhysicalDevice pickPhysicalDevice(VkInstance &instance	
-		, bool (*is_device_suitable)(VkPhysicalDevice&, void*), void* user_supplied_data) 
+    VkPhysicalDevice pickPhysicalDevice(VkInstance instance	
+		,bool (*is_device_suitable)(VkPhysicalDevice, void*), void* user_supplied_data) 
 	{
 		uint32_t device_count = 0;
 		vkEnumeratePhysicalDevices(instance, &device_count, nullptr);
@@ -194,9 +201,9 @@ namespace Helper{
 	};
 	
 	template<bool EnableValidationLayers>
-    void createLogicalDevice(VkDevice &logical_device
-		, VkPhysicalDevice &physical_device, std::vector<std::pair<VkQueue*, uint32_t>> vk_queues_and_family_indice_pairs
-		, std::span<const char*> req_validation_layers, std::span<const char*> req_extensions) 
+    void createLogicalDevice(VkDevice& logical_device
+		,VkPhysicalDevice physical_device, std::vector<std::pair<VkQueue*, uint32_t>> vk_queues_and_family_indice_pairs
+		,std::span<const char*> req_validation_layers, std::span<const char*> req_extensions) 
 	{
 		std::set<uint32_t> unique_queue_families;
 		for (auto& queue_family_pair: vk_queues_and_family_indice_pairs) {
@@ -237,11 +244,11 @@ namespace Helper{
 		}
 	}
 
-    void createSwapChain (VkSwapchainKHR &swapchain, std::vector<VkImage> &swapchain_images
-		, VkSurfaceKHR &surface, VkDevice &logical_device
-		, VkSurfaceCapabilitiesKHR swapchain_capabilities
-		, VkExtent2D extent, VkSurfaceFormatKHR format, VkPresentModeKHR present_mode
-		, uint32_t graphics_family_indice, uint32_t presentation_family_indice)
+    void createSwapChain (VkSwapchainKHR& swapchain, std::vector<VkImage> &swapchain_images
+		,VkSurfaceKHR surface, VkDevice logical_device
+		,VkSurfaceCapabilitiesKHR swapchain_capabilities
+		,VkExtent2D extent, VkSurfaceFormatKHR format, VkPresentModeKHR present_mode
+		,uint32_t graphics_family_indice, uint32_t presentation_family_indice)
 	{
 		uint32_t image_count = ((swapchain_capabilities.maxImageCount == 0) ? swapchain_capabilities.minImageCount + 1 : swapchain_capabilities.maxImageCount);
 		VkSwapchainCreateInfoKHR swapchain_create_info {
@@ -283,8 +290,8 @@ namespace Helper{
 	}
 
     void createImageViews(std::vector<VkImageView> &swapchain_images_view
-		, VkDevice &logical_device, VkFormat swapchain_image_format
-		, std::vector<VkImage> &swapchain_images) 
+		,VkDevice logical_device, VkFormat swapchain_image_format
+		,std::vector<VkImage> &swapchain_images) 
 	{
 		swapchain_images_view.resize(swapchain_images.size());
 		for (size_t i = 0; i < swapchain_images.size (); ++i) {
@@ -308,7 +315,7 @@ namespace Helper{
 		}
 	}
 
-	VkShaderModule createShaderModule (VkDevice& device, const std::vector<char>& byte_code) {
+	VkShaderModule createShaderModule (VkDevice device, const std::vector<char>& byte_code) {
 		VkShaderModuleCreateInfo create_info{
 			.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
 			.codeSize = byte_code.size(),
@@ -322,7 +329,7 @@ namespace Helper{
 	}
 
 	void createRenderPasses (VkRenderPass& render_pass
-		,VkDevice& device, VkAttachmentDescription color_attachment
+		,VkDevice device, VkAttachmentDescription color_attachment
 		,const std::span<VkSubpassDescription> subpasses) 
 	{
 		VkSubpassDependency dependency {
@@ -350,8 +357,7 @@ namespace Helper{
 	
 	template<int num_shader_stages>
 	void createGraphicsPipelineDefaultSize (VkPipelineLayout& pipeline_layout, VkPipeline& graphics_pipeline
-		,VkDevice& device, VkRenderPass& render_pass
-		,const VkPipelineShaderStageCreateInfo shader_stages[]
+		,VkDevice device, VkRenderPass render_pass, const VkPipelineShaderStageCreateInfo shader_stages[]
 		,VkPipelineVertexInputStateCreateInfo vertex_input_info, VkPipelineInputAssemblyStateCreateInfo input_assembly_info
 		,VkExtent2D swapchain_extent, const std::span<VkDynamicState> dynamic_states)
 	{
@@ -465,7 +471,7 @@ namespace Helper{
 	}
 
 	void createFramebuffers (std::vector<VkFramebuffer>& framebuffers
-		,VkDevice& device, VkRenderPass& render_pass, const std::span<VkImageView> images_view
+		,VkDevice device, VkRenderPass render_pass, const std::span<VkImageView> images_view
 		,VkExtent2D extent)
 	{
 		framebuffers.resize (images_view.size ());
@@ -489,7 +495,7 @@ namespace Helper{
 	}
 
 	void createCommandPoolAndBuffer (VkCommandPool& command_pool, std::span<VkCommandBuffer> command_buffers
-		,VkDevice& device, uint32_t queue_family_index)
+		,VkDevice device, uint32_t queue_family_index)
 	{
 		// Create command pool
 		VkCommandPoolCreateInfo pool_info {
@@ -514,8 +520,8 @@ namespace Helper{
 		}
 	}
 
-	uint32_t findMemoryType (VkPhysicalDevice& physical_device, uint32_t type_filter
-		, VkMemoryPropertyFlags properties) 
+	uint32_t findMemoryType (VkPhysicalDevice physical_device, uint32_t type_filter
+		,VkMemoryPropertyFlags properties) 
 	{
 		VkPhysicalDeviceMemoryProperties mem_properties;
 		vkGetPhysicalDeviceMemoryProperties (physical_device, &mem_properties);
@@ -526,5 +532,76 @@ namespace Helper{
 				return i;
 		
 		THROW_Critical ("failed to find suitable memory type");
+	}
+
+	void createBuffer (VkBuffer& buffer, VkDeviceMemory& buffer_memory
+		,VkDevice device, VkPhysicalDevice physical_device, VkDeviceSize size
+		,VkBufferUsageFlags usage, VkMemoryPropertyFlags properties)
+	{
+		VkBufferCreateInfo buffer_info {
+			.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+			.size = size,
+			.usage = usage,
+			.sharingMode = VK_SHARING_MODE_EXCLUSIVE
+		};
+	
+	    if (vkCreateBuffer(device, &buffer_info, nullptr, &buffer) != VK_SUCCESS) {
+	        throw std::runtime_error("failed to create buffer!");
+	    }
+	
+	    VkMemoryRequirements mem_requirements;
+	    vkGetBufferMemoryRequirements(device, buffer, &mem_requirements);
+	
+	    VkMemoryAllocateInfo alloc_info {
+			.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+			.allocationSize = mem_requirements.size,
+			.memoryTypeIndex = findMemoryType(physical_device, mem_requirements.memoryTypeBits, properties)
+		};
+	
+	    if (vkAllocateMemory(device, &alloc_info, nullptr, &buffer_memory) != VK_SUCCESS) {
+	        throw std::runtime_error("failed to allocate buffer memory!");
+	    }
+	
+	    vkBindBufferMemory(device, buffer, buffer_memory, 0);
+	};
+
+	void copyBuffer_s (VkBuffer& dst_buffer
+		,VkBuffer src_buffer, VkDeviceSize buffer_size
+		,VkDevice device, VkCommandPool command_pool, VkQueue graphics_queue)
+	{
+		VkCommandBufferAllocateInfo alloc_info {
+			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+			.commandPool = command_pool,
+			.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+			.commandBufferCount = 1
+		};
+	
+	    VkCommandBuffer command_buffer;
+	    vkAllocateCommandBuffers (device, &alloc_info, &command_buffer);
+
+		VkCommandBufferBeginInfo begin_info{
+			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+			.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT
+		};
+		vkBeginCommandBuffer (command_buffer, &begin_info);
+
+		VkBufferCopy copy_region{
+			.srcOffset = 0, // Optional
+			.dstOffset = 0, // Optional
+			.size = buffer_size
+		};
+		vkCmdCopyBuffer (command_buffer, src_buffer, dst_buffer, 1, &copy_region);
+
+		vkEndCommandBuffer (command_buffer);
+
+		VkSubmitInfo submit_info{
+			.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+			.commandBufferCount = 1,
+			.pCommandBuffers = &command_buffer
+		};
+		vkQueueSubmit (graphics_queue, 1, &submit_info, VK_NULL_HANDLE);
+		vkQueueWaitIdle (graphics_queue);
+
+		vkFreeCommandBuffers(device, command_pool, 1, &command_buffer);
 	}
 };

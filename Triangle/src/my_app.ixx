@@ -109,11 +109,11 @@ namespace MyApp {
 		virtual void cleanup () override;
 
 	private:
-		void cleanupSwapchainAndRelated ();
-		void createSwapchainAndRelated ();
-		void recreateSwapchainAndRelated ();
+		void cleanup_swapchain_and_related ();
+		void create_swapchain_and_related ();
+		void recreate_swapchain_and_related ();
 
-		void extras_setup () {}
+		void create_vertex_buffer ();
 	private:
 		size_t m_CurrentFrame = 0;
 	};
