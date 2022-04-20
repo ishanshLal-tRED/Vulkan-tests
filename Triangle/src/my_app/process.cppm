@@ -8,8 +8,7 @@ import <GLFW/glfw3.h>;
 import Helpers.GLFW;
 
 // already very clean
-bool MyApp::Context::KeepContextRunning () {	
-	std::this_thread::sleep_for(std::chrono::milliseconds(100));
+bool MyApp::Context::KeepContextRunning () {
 	return !glfwWindowShouldClose(MainWindow);
 }
 

@@ -42,6 +42,14 @@ namespace MyApp {
 		}
 	};
 
+	export struct UniformBufferObject {
+		// meeting alignment requirements
+		alignas(16) // we can do this or, #define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
+	    glm::mat4 model;
+	    glm::mat4 view;
+	    glm::mat4 projection;
+	};
+
 	export struct Context: public Application::BaseContext {
 
 		virtual bool KeepContextRunning() override;
@@ -78,6 +86,8 @@ namespace MyApp {
 			} Modules;
 
 			VkRenderPass RenderPass;
+
+			VkDescriptorSetLayout DescriptorSetLayout;
 			
 			VkPipelineLayout PipelineLayout;
 			VkPipeline GraphicsPipeline;
@@ -97,6 +107,11 @@ namespace MyApp {
 				VkDeviceMemory VertexBufferMemory;
 				VkBuffer IndexBuffer;
 				VkDeviceMemory IndexBufferMemory;
+				VkBuffer UniformBuffer [MAX_FRAMES_IN_FLIGHT];
+				VkDeviceMemory UniformBufferMemory [MAX_FRAMES_IN_FLIGHT];
+
+				VkDescriptorPool DescriptorPool;
+				VkDescriptorSet DescriptorSets [MAX_FRAMES_IN_FLIGHT];
 			} Extras;
 		} Vk;
 	};

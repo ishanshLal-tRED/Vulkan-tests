@@ -9,6 +9,7 @@ import <set>;
 
 import <vulkan/vulkan.h>;
 import <glm/glm.hpp>;
+import <glm/gtc/matrix_transform.hpp>;
 
 import Helpers.Vk;
 import Helpers.GLFW;
@@ -99,15 +100,16 @@ void MyApp::Instance::initializeVk () {
 
 	// Create shader modules	
 	m_Context.Vk.Modules.Vertex   = Helper::createShaderModule (m_Context.Vk.LogicalDevice, 
-			Helper::readFile (std::string() + PROJECT_ROOT_LOCATION + "/assets/2d_color/vert.sprv"));
+			Helper::readFile (std::string() + PROJECT_ROOT_LOCATION + "/assets/2d_color-with-ubo/vert.sprv"));
 	m_Context.Vk.Modules.Fragment = Helper::createShaderModule (m_Context.Vk.LogicalDevice, 
-			Helper::readFile (std::string() + PROJECT_ROOT_LOCATION + "/assets/2d_color/frag.sprv"));
-
-	create_swapchain_and_related ();
+			Helper::readFile (std::string() + PROJECT_ROOT_LOCATION + "/assets/2d_color-with-ubo/frag.sprv"));
 
 	// Create command pool & buffer
 	Helper::createCommandPoolAndBuffer (m_Context.Vk.CommandPool, m_Context.Vk.CommandBuffers
 		,m_Context.Vk.LogicalDevice, queue_family_indices.GraphicsFamily.value ());
+
+	create_buffers (); // uniform buffers needs to be created before creating descriptor sets and we also need command pool for transferring staged buffer to device local
+	create_swapchain_and_related ();
 
 	// Create syncronisation objects
 	VkSemaphoreCreateInfo semaphore_info { .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
@@ -123,7 +125,6 @@ void MyApp::Instance::initializeVk () {
 			THROW_Critical ("failed to create sync locks!");
 	}
 
-	create_buffers ();
 }
 
 void MyApp::Instance::render (double latency) {
@@ -134,8 +135,9 @@ void MyApp::Instance::render (double latency) {
 	
 	// did you notice, these struct ex. VkCommandBuffer, VkPipeline, VkRenderPass, VkFramebuffer are typdefs to a pointer to real_object, so there's no need to pass them as refrence
 	auto record_command_buffer = [](VkCommandBuffer command_buffer
-			, VkPipeline graphics_pipeline, VkRenderPass render_pass, VkFramebuffer framebuffer
-			, VkBuffer vertex_buffer, VkBuffer index_buffer, VkExtent2D extent) 
+			,VkPipeline graphics_pipeline, VkRenderPass render_pass, VkFramebuffer framebuffer
+			,VkBuffer vertex_buffer, VkBuffer index_buffer, VkPipelineLayout pipeline_layout, VkDescriptorSet descriptor_set
+			,VkExtent2D extent) 
 	{
 		VkCommandBufferBeginInfo begin_info {
 			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
@@ -166,6 +168,7 @@ void MyApp::Instance::render (double latency) {
 		VkDeviceSize offsets[] = {0};
 		vkCmdBindVertexBuffers (command_buffer, 0, 1, vertex_buffers, offsets);
 		vkCmdBindIndexBuffer (command_buffer, index_buffer, 0, VK_INDEX_TYPE_UINT16);
+		vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout, 0, 1, &descriptor_set, 0, nullptr);
 
  		vkCmdDrawIndexed (command_buffer, std::size(s_TriangleIndices) /*no. of vertices*/, 1, 0, 0, 0);
 
@@ -189,7 +192,25 @@ void MyApp::Instance::render (double latency) {
 	vkResetFences (m_Context.Vk.LogicalDevice, 1, &m_Context.Vk.InFlightFences[current_frame_flight]);
 
 	vkResetCommandBuffer(m_Context.Vk.CommandBuffers[current_frame_flight], 0);
-	record_command_buffer(m_Context.Vk.CommandBuffers[current_frame_flight], m_Context.Vk.GraphicsPipeline, m_Context.Vk.RenderPass, m_Context.Vk.SwapchainFramebuffers[image_index], m_Context.Vk.Extras.VertexBuffer, m_Context.Vk.Extras.IndexBuffer, m_Context.Vk.SwapchainImageExtent);
+	record_command_buffer(m_Context.Vk.CommandBuffers[current_frame_flight]
+		,m_Context.Vk.GraphicsPipeline, m_Context.Vk.RenderPass, m_Context.Vk.SwapchainFramebuffers[image_index]
+		,m_Context.Vk.Extras.VertexBuffer, m_Context.Vk.Extras.IndexBuffer
+		,m_Context.Vk.PipelineLayout, m_Context.Vk.Extras.DescriptorSets[current_frame_flight]
+		,m_Context.Vk.SwapchainImageExtent);
+
+	{ // update uniform info
+		MyApp::UniformBufferObject ubo {
+			.model = glm::rotate(glm::mat4(1.0f), float(GetRenderTimestamp () * glm::radians(90.0)), glm::vec3(0.0f, 0.0f, 1.0f)),
+			.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f)),
+			.projection = glm::perspective(glm::radians(45.0f), m_Context.Vk.SwapchainImageExtent.width / (float) m_Context.Vk.SwapchainImageExtent.height, 0.1f, 10.0f)
+		};
+		ubo.projection[1][1] *= -1; // inverting y axis
+		void* data = nullptr;
+		vkMapMemory(m_Context.Vk.LogicalDevice, m_Context.Vk.Extras.UniformBufferMemory[current_frame_flight], 0, sizeof(ubo), 0, &data);
+		memcpy(data, &ubo, sizeof(ubo));
+		//memcpy_s(data, sizeof(ubo), &ubo, sizeof(ubo));
+		vkUnmapMemory(m_Context.Vk.LogicalDevice, m_Context.Vk.Extras.UniformBufferMemory[current_frame_flight]);
+	}
 
 	VkSemaphore wait_semaphores[] = {m_Context.Vk.ImageAvailableSemaphores[current_frame_flight]};
 	VkPipelineStageFlags wait_stages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
@@ -231,6 +252,10 @@ void MyApp::Instance::terminateVk () {
 	vkFreeMemory (m_Context.Vk.LogicalDevice, m_Context.Vk.Extras.VertexBufferMemory, nullptr);
 	vkDestroyBuffer (m_Context.Vk.LogicalDevice, m_Context.Vk.Extras.IndexBuffer, nullptr);
 	vkFreeMemory (m_Context.Vk.LogicalDevice, m_Context.Vk.Extras.IndexBufferMemory, nullptr);
+	for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
+		vkDestroyBuffer (m_Context.Vk.LogicalDevice, m_Context.Vk.Extras.UniformBuffer[i], nullptr);
+		vkFreeMemory (m_Context.Vk.LogicalDevice, m_Context.Vk.Extras.UniformBufferMemory[i], nullptr);
+	}
 
 	vkDestroyShaderModule (m_Context.Vk.LogicalDevice, m_Context.Vk.Modules.Vertex, nullptr);
 	vkDestroyShaderModule (m_Context.Vk.LogicalDevice, m_Context.Vk.Modules.Fragment, nullptr);
@@ -263,10 +288,13 @@ void MyApp::Instance::cleanup_swapchain_and_related () {
 	for (auto &framebuffer: m_Context.Vk.SwapchainFramebuffers) 
 		vkDestroyFramebuffer (m_Context.Vk.LogicalDevice, framebuffer, nullptr);
 
-	vkDestroyPipeline(m_Context.Vk.LogicalDevice, m_Context.Vk.GraphicsPipeline, nullptr);
-	vkDestroyPipelineLayout(m_Context.Vk.LogicalDevice, m_Context.Vk.PipelineLayout, nullptr);
+	vkDestroyPipeline (m_Context.Vk.LogicalDevice, m_Context.Vk.GraphicsPipeline, nullptr);
+	vkDestroyPipelineLayout (m_Context.Vk.LogicalDevice, m_Context.Vk.PipelineLayout, nullptr);
 
-	vkDestroyRenderPass(m_Context.Vk.LogicalDevice, m_Context.Vk.RenderPass, nullptr);
+	vkDestroyDescriptorPool (m_Context.Vk.LogicalDevice, m_Context.Vk.Extras.DescriptorPool, nullptr);
+	vkDestroyDescriptorSetLayout (m_Context.Vk.LogicalDevice, m_Context.Vk.DescriptorSetLayout, nullptr);
+
+	vkDestroyRenderPass (m_Context.Vk.LogicalDevice, m_Context.Vk.RenderPass, nullptr);
 	
 	for (auto &image_view: m_Context.Vk.SwapchainImagesView) 
 		vkDestroyImageView (m_Context.Vk.LogicalDevice, image_view, nullptr);
@@ -351,6 +379,23 @@ void MyApp::Instance::create_swapchain_and_related () {
 			,subpasses);
 	}
 
+	{ // Create Discriptor set layout
+		VkDescriptorSetLayoutBinding ubo_layout_binding {
+			.binding = 0,
+			.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+			.descriptorCount = 1,
+			.stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+			.pImmutableSamplers = nullptr,
+		};
+		VkDescriptorSetLayoutCreateInfo layout_info {
+			.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+			.bindingCount = 1,
+			.pBindings = &ubo_layout_binding
+		};
+		if (vkCreateDescriptorSetLayout(m_Context.Vk.LogicalDevice, &layout_info, nullptr, &m_Context.Vk.DescriptorSetLayout) != VK_SUCCESS)
+		   THROW_Critical("failed to create descriptor set layout!");
+	}
+
 	{ // Create Graphics Pipeline
 		VkPipelineShaderStageCreateInfo vert_shader_stage_info{
 			.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
@@ -366,15 +411,74 @@ void MyApp::Instance::create_swapchain_and_related () {
 		};
 		VkPipelineShaderStageCreateInfo shader_stages[] = {vert_shader_stage_info, frag_shader_stage_info};
 		
-		auto bindingDescription = Vertex::geBindingDiscription();
-		auto attributeDescriptions = Vertex::getAttributeDescriptions();
+		// vertex discription
+		auto binding_description = Vertex::geBindingDiscription();
+		auto attribute_descriptions = Vertex::getAttributeDescriptions();
+		{
+			// Create discription pool
+			VkDescriptorPoolSize pool_size {
+				.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+				.descriptorCount = MAX_FRAMES_IN_FLIGHT
+			};
+			VkDescriptorPoolCreateInfo pool_info {
+				.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+				.maxSets = MAX_FRAMES_IN_FLIGHT,
+				.poolSizeCount = 1,
+				.pPoolSizes = &pool_size
+			};
+			if (vkCreateDescriptorPool (m_Context.Vk.LogicalDevice, &pool_info, nullptr, &m_Context.Vk.Extras.DescriptorPool) != VK_SUCCESS)
+				THROW_Critical ("failed to create descriptor pool");
+
+			// Create discription sets
+			VkDescriptorSetLayout set_layouts[MAX_FRAMES_IN_FLIGHT];
+			for (auto& set_layout: set_layouts) {
+				set_layout = m_Context.Vk.DescriptorSetLayout;
+			} 
+			
+			VkDescriptorSetAllocateInfo alloc_info {
+				.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+				.descriptorPool = m_Context.Vk.Extras.DescriptorPool,
+				.descriptorSetCount = MAX_FRAMES_IN_FLIGHT,
+				.pSetLayouts = set_layouts
+			};
+			if (vkAllocateDescriptorSets(m_Context.Vk.LogicalDevice, &alloc_info, m_Context.Vk.Extras.DescriptorSets) != VK_SUCCESS)
+				THROW_Critical("failed to allocate descriptor sets!");
+
+			for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
+				VkDescriptorBufferInfo buffer_info {
+					.buffer = m_Context.Vk.Extras.UniformBuffer[i],
+					.offset = 0,
+					.range = sizeof(MyApp::UniformBufferObject)
+				};
+				VkWriteDescriptorSet descriptor_write{
+					.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+					.dstSet = m_Context.Vk.Extras.DescriptorSets[i],
+					.dstBinding = 0,
+					.dstArrayElement = 0,
+					.descriptorCount = 1,
+					.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+					.pImageInfo = nullptr, // Optional
+					.pBufferInfo = &buffer_info,
+					.pTexelBufferView = nullptr // Optional
+				};
+				vkUpdateDescriptorSets(m_Context.Vk.LogicalDevice, 1, &descriptor_write, 0, nullptr);
+			}
+		}
+
+		VkPipelineLayoutCreateInfo pipeline_layout_info {
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+			.setLayoutCount = 1,
+			.pSetLayouts = &m_Context.Vk.DescriptorSetLayout,
+			.pushConstantRangeCount = 0, // Optional
+			.pPushConstantRanges = nullptr, // Optional
+		};
 			
 		VkPipelineVertexInputStateCreateInfo vertex_input_info {
 			.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
 			.vertexBindingDescriptionCount = 1,
-			.pVertexBindingDescriptions = &bindingDescription, // Optional
+			.pVertexBindingDescriptions = &binding_description, // Optional
 			.vertexAttributeDescriptionCount = 2,
-			.pVertexAttributeDescriptions = attributeDescriptions.data () // Optional
+			.pVertexAttributeDescriptions = attribute_descriptions.data () // Optional
 		};
 		VkPipelineInputAssemblyStateCreateInfo input_assembly_info {
 			.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
@@ -390,7 +494,8 @@ void MyApp::Instance::create_swapchain_and_related () {
 		};
 		
 		Helper::createGraphicsPipelineDefaultSize<2> (m_Context.Vk.PipelineLayout, m_Context.Vk.GraphicsPipeline
-			,m_Context.Vk.LogicalDevice, m_Context.Vk.RenderPass, shader_stages
+			,m_Context.Vk.LogicalDevice, m_Context.Vk.RenderPass
+			,pipeline_layout_info, shader_stages
 			,vertex_input_info, input_assembly_info
 			,m_Context.Vk.SwapchainImageExtent, dynamic_states);
 	}
@@ -460,6 +565,16 @@ void MyApp::Instance::create_buffers () {
 
 		vkDestroyBuffer (m_Context.Vk.LogicalDevice, staging_buffer, nullptr);
 		vkFreeMemory (m_Context.Vk.LogicalDevice, staging_buffer_memory, nullptr);
+	}
+	{ // uniform buffers
+		VkDeviceSize buffer_size = sizeof(UniformBufferObject);
+
+		for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
+			Helper::createBuffer (m_Context.Vk.Extras.UniformBuffer[i], m_Context.Vk.Extras.UniformBufferMemory[i]
+				,m_Context.Vk.LogicalDevice, m_Context.Vk.PhysicalDevice, buffer_size
+				,VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT
+				,VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+		}
 	}
 }
 

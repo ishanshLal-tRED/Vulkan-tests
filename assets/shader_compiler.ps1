@@ -14,3 +14,5 @@ $Files | ForEach{
     $dir_path  = $object.Directory
     Invoke-Expression "$GLSLC `"$full_path`" -o `"$dir_path/$file_name.sprv`""
 }
+
+# TODO: add functionality to compile every shader inside a folder

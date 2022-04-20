@@ -47,7 +47,7 @@ namespace Helper{
 		template<int num_shader_stages> // full size means
 		void createGraphicsPipelineDefaultSize (VkPipelineLayout&, VkPipeline&
 			,VkDevice, VkRenderPass
-			,const VkPipelineShaderStageCreateInfo[]
+			,VkPipelineLayoutCreateInfo, const VkPipelineShaderStageCreateInfo[]
 			,VkPipelineVertexInputStateCreateInfo, VkPipelineInputAssemblyStateCreateInfo
 			,VkExtent2D, const std::span<VkDynamicState>);
 		
@@ -357,7 +357,8 @@ namespace Helper{
 	
 	template<int num_shader_stages>
 	void createGraphicsPipelineDefaultSize (VkPipelineLayout& pipeline_layout, VkPipeline& graphics_pipeline
-		,VkDevice device, VkRenderPass render_pass, const VkPipelineShaderStageCreateInfo shader_stages[]
+		,VkDevice device, VkRenderPass render_pass
+		,VkPipelineLayoutCreateInfo pipeline_layout_info, const VkPipelineShaderStageCreateInfo shader_stages[]
 		,VkPipelineVertexInputStateCreateInfo vertex_input_info, VkPipelineInputAssemblyStateCreateInfo input_assembly_info
 		,VkExtent2D swapchain_extent, const std::span<VkDynamicState> dynamic_states)
 	{
@@ -387,7 +388,7 @@ namespace Helper{
 			.rasterizerDiscardEnable = VK_FALSE,
 			.polygonMode = VK_POLYGON_MODE_FILL,
 			.cullMode = VK_CULL_MODE_BACK_BIT,
-			.frontFace = VK_FRONT_FACE_CLOCKWISE,
+			.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
 			.depthBiasEnable = VK_FALSE,
 			.depthBiasConstantFactor = 0.0f, // Optional
 			.depthBiasClamp = 0.0f, // Optional
@@ -423,14 +424,6 @@ namespace Helper{
 			.attachmentCount = 1,
 			.pAttachments = &color_blend_attachment,
 			.blendConstants = {0.0f, 0.0f, 0.0f, 0.0f} // Optional
-		};
-		
-		VkPipelineLayoutCreateInfo pipeline_layout_info {
-			.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-			.setLayoutCount = 0, // Optional
-			.pSetLayouts = nullptr, // Optional
-			.pushConstantRangeCount = 0, // Optional
-			.pPushConstantRanges = nullptr, // Optional
 		};
 
 		if (vkCreatePipelineLayout(device, &pipeline_layout_info, nullptr, &pipeline_layout) != VK_SUCCESS) 

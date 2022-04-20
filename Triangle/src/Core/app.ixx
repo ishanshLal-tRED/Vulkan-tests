@@ -51,6 +51,9 @@ namespace Application
 		}
 		inline static void TerminateVk () { s_TheAppInstance->terminateVk(); } 
 		inline static void Cleanup () { s_TheAppInstance->cleanup(); } 
+
+		inline static const double GetRenderTimestamp() { return double(s_TheAppInstance->m_RenderTimestamp) / CLOCKS_PER_SEC; }
+		inline static const double GetUpdateTimestamp() { return double(s_TheAppInstance->m_UpdateTimestamp) / CLOCKS_PER_SEC; }
 	protected:
 		virtual void setup (const std::span<char*> &argument_list) = 0;
 		virtual void initializeVk () = 0;
@@ -59,7 +62,8 @@ namespace Application
 		virtual void terminateVk () = 0;
 		virtual void cleanup () = 0;
 
-		clock_t m_UpdateTimestamp = clock(), m_RenderTimestamp = clock();
 		TypeContext m_Context;
+	private:
+		clock_t m_UpdateTimestamp = clock(), m_RenderTimestamp = clock();
 	};
 };
