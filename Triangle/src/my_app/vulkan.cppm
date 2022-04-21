@@ -248,6 +248,8 @@ void MyApp::Instance::terminateVk () {
 	LOG_trace ("{:s}", __FUNCSIG__);
 	vkDeviceWaitIdle (m_Context.Vk.LogicalDevice);
 
+	vkDestroyImage (m_Context.Vk.LogicalDevice, m_Context.Vk.Extras.TextureImage, nullptr);
+	vkFreeMemory (m_Context.Vk.LogicalDevice, m_Context.Vk.Extras.TextureImageMemory, nullptr);
 	vkDestroyBuffer (m_Context.Vk.LogicalDevice, m_Context.Vk.Extras.VertexBuffer, nullptr);
 	vkFreeMemory (m_Context.Vk.LogicalDevice, m_Context.Vk.Extras.VertexBufferMemory, nullptr);
 	vkDestroyBuffer (m_Context.Vk.LogicalDevice, m_Context.Vk.Extras.IndexBuffer, nullptr);
@@ -534,7 +536,7 @@ void MyApp::Instance::create_buffers () {
 			,VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT
 			,VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
-		Helper::copyBuffer_s (m_Context.Vk.Extras.VertexBuffer, staging_buffer
+		Helper::copyBuffer (m_Context.Vk.Extras.VertexBuffer, staging_buffer
 			,buffer_size, m_Context.Vk.LogicalDevice, m_Context.Vk.CommandPool, m_Context.Vk.Queues.Graphics);
 
 		vkDestroyBuffer (m_Context.Vk.LogicalDevice, staging_buffer, nullptr);
@@ -560,7 +562,7 @@ void MyApp::Instance::create_buffers () {
 			,VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT
 			,VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
-		Helper::copyBuffer_s (m_Context.Vk.Extras.IndexBuffer, staging_buffer
+		Helper::copyBuffer (m_Context.Vk.Extras.IndexBuffer, staging_buffer
 			,buffer_size, m_Context.Vk.LogicalDevice, m_Context.Vk.CommandPool, m_Context.Vk.Queues.Graphics);
 
 		vkDestroyBuffer (m_Context.Vk.LogicalDevice, staging_buffer, nullptr);
@@ -576,6 +578,37 @@ void MyApp::Instance::create_buffers () {
 				,VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 		}
 	}
+	{ // texture image
+		auto [image_data, tex_width, tex_height, tex_channels] = Helper::readImageRGBA ("C:/Users/Omen/Documents/MyExperiments/Vulkan/assets/textures/hatsune_miku.jpg");
+
+		VkDeviceSize buffer_size = tex_width * tex_height * 4;//tex_channels * sizeof(image_data[0]);
+
+		VkBuffer staging_buffer;
+		VkDeviceMemory staging_buffer_memory;
+		Helper::createBuffer (staging_buffer, staging_buffer_memory
+			,m_Context.Vk.LogicalDevice, m_Context.Vk.PhysicalDevice, buffer_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT
+			,VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+		
+		void* staging_buffer_ptr = nullptr;
+		vkMapMemory (m_Context.Vk.LogicalDevice, staging_buffer_memory, 0, buffer_size, 0, &staging_buffer_ptr);
+		memcpy (staging_buffer_ptr, image_data, buffer_size);
+		vkUnmapMemory(m_Context.Vk.LogicalDevice, staging_buffer_memory);
+		// memcpy_s (buffer_ptr, alloc_info.allocationSize, s_TriangleVertices, sizeof(s_TriangleVertices)); // bug in microsoft stl header units
+
+		Helper::freeImage (image_data);
+
+		Helper::createImage (m_Context.Vk.Extras.TextureImage, m_Context.Vk.Extras.TextureImageMemory
+			,m_Context.Vk.LogicalDevice, m_Context.Vk.PhysicalDevice, {tex_width, tex_height}
+			,VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT
+			,VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+		Helper::copyBuffer (m_Context.Vk.Extras.TextureImage
+			,staging_buffer, {tex_width, tex_height}
+			,m_Context.Vk.LogicalDevice, m_Context.Vk.CommandPool, m_Context.Vk.Queues.Graphics);
+
+		vkDestroyBuffer (m_Context.Vk.LogicalDevice, staging_buffer, nullptr);
+		vkFreeMemory (m_Context.Vk.LogicalDevice, staging_buffer_memory, nullptr);
+	} 
 }
 
 VKAPI_ATTR VkBool32 VKAPI_CALL vk_debug_callback (VkDebugUtilsMessageSeverityFlagBitsEXT message_severity

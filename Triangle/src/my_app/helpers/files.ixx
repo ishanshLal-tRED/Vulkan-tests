@@ -3,7 +3,11 @@ module;
 
 import <filesystem>;
 import <fstream>;
-import <vector>;
+export import <vector>;
+export import <tuple>;
+
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h";
 
 export module Helpers.Files;
 
@@ -22,5 +26,20 @@ namespace Helper {
 		
 		file.close ();
 		return buffer;
+	}
+
+	export
+	std::tuple<uint8_t*, uint32_t, uint32_t, uint32_t> readImageRGBA (const std::string &filename) {
+		int width, height, channels;
+		stbi_uc* image_data = stbi_load (filename.c_str (), &width, &height, &channels, STBI_rgb_alpha);
+		if (image_data == nullptr)
+			THROW_Critical ("couldn't load image: \'{:s}\'", filename);
+
+		return {image_data, width, height, channels};
+	}
+
+	export
+	void freeImage (uint8_t* image_data) {
+		stbi_image_free (image_data);
 	}
 }

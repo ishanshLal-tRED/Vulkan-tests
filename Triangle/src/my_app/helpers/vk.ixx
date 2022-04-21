@@ -66,8 +66,25 @@ namespace Helper{
 		void createBuffer (VkBuffer&, VkDeviceMemory&
 			,VkDevice, VkPhysicalDevice, VkDeviceSize, VkBufferUsageFlags, VkMemoryPropertyFlags);
 
-		void copyBuffer_s (VkBuffer&
+		void copyBuffer (VkBuffer&
 			,VkBuffer, VkDeviceSize, VkDevice, VkCommandPool, VkQueue);
+
+		void copyBuffer (VkImage&
+			,VkBuffer, VkExtent2D
+			,VkDevice, VkCommandPool, VkQueue);
+		
+		void createImage (VkImage&, VkDeviceMemory&
+			,VkDevice, VkPhysicalDevice, VkExtent2D
+			,VkFormat, VkImageTiling, VkImageUsageFlags
+			,VkMemoryPropertyFlags);
+	
+		VkCommandBuffer beginSingleTimeCommands (VkDevice, VkCommandPool);
+
+		void endSingleTimeCommands (VkCommandBuffer&
+			,VkDevice, VkCommandPool, VkQueue);
+
+		void transitionImageLayout (VkDevice, VkCommandPool, VkQueue
+			,VkImage, VkFormat, VkImageLayout, VkImageLayout) ;
 	};
 
     template<bool EnableValidationLayers>
@@ -558,26 +575,13 @@ namespace Helper{
 	    vkBindBufferMemory(device, buffer, buffer_memory, 0);
 	};
 
-	void copyBuffer_s (VkBuffer& dst_buffer
+	void copyBuffer (VkBuffer& dst_buffer
 		,VkBuffer src_buffer, VkDeviceSize buffer_size
 		,VkDevice device, VkCommandPool command_pool, VkQueue graphics_queue)
 	{
-		VkCommandBufferAllocateInfo alloc_info {
-			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-			.commandPool = command_pool,
-			.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-			.commandBufferCount = 1
-		};
-	
-	    VkCommandBuffer command_buffer;
-	    vkAllocateCommandBuffers (device, &alloc_info, &command_buffer);
-
-		VkCommandBufferBeginInfo begin_info{
-			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-			.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT
-		};
-		vkBeginCommandBuffer (command_buffer, &begin_info);
-
+		
+	    VkCommandBuffer command_buffer = beginSingleTimeCommands (device, command_pool);
+		
 		VkBufferCopy copy_region{
 			.srcOffset = 0, // Optional
 			.dstOffset = 0, // Optional
@@ -585,16 +589,156 @@ namespace Helper{
 		};
 		vkCmdCopyBuffer (command_buffer, src_buffer, dst_buffer, 1, &copy_region);
 
+		endSingleTimeCommands (command_buffer, device, command_pool, graphics_queue);
+	}
+	
+	void createImage (VkImage& image, VkDeviceMemory& image_memory
+		,VkDevice device, VkPhysicalDevice physical_device, VkExtent2D size
+		,VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage
+		,VkMemoryPropertyFlags properties)
+	{
+		VkImageCreateInfo image_info {
+			.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+			.imageType = VK_IMAGE_TYPE_2D,
+			.format = format,
+			.extent = VkExtent3D {.width = size.width, .height = size.height, .depth = 1},
+			.mipLevels = 1,
+			.arrayLayers = 1,
+			.samples = VK_SAMPLE_COUNT_1_BIT,
+			.tiling = tiling,
+			.usage = usage,
+			.sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+			.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED
+		};
+	
+	    if (vkCreateImage (device, &image_info, nullptr, &image) != VK_SUCCESS)
+	        THROW_Critical ("failed to create image!");
+	
+	    VkMemoryRequirements mem_requirements;
+	    vkGetImageMemoryRequirements (device, image, &mem_requirements);
+	
+	    VkMemoryAllocateInfo alloc_info {
+			.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+			.allocationSize = mem_requirements.size,
+			.memoryTypeIndex = findMemoryType (physical_device, mem_requirements.memoryTypeBits, properties)
+		};
+	
+	    if (vkAllocateMemory (device, &alloc_info, nullptr, &image_memory) != VK_SUCCESS)
+	        THROW_Critical ("failed to allocate buffer memory!");
+	
+	    vkBindImageMemory (device, image, image_memory, 0);
+	};
+		
+	VkCommandBuffer beginSingleTimeCommands (VkDevice logical_device
+		,VkCommandPool command_pool) 
+	{
+		VkCommandBufferAllocateInfo alloc_info {
+			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+			.commandPool = command_pool,
+			.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+			.commandBufferCount = 1
+		};
+
+		VkCommandBuffer command_buffer;
+		vkAllocateCommandBuffers (logical_device, &alloc_info, &command_buffer);
+
+		VkCommandBufferBeginInfo begin_info{
+			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+			.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT
+		};
+
+		vkBeginCommandBuffer (command_buffer, &begin_info);
+
+		return command_buffer;
+	}
+		
+	void endSingleTimeCommands (VkCommandBuffer& command_buffer
+		,VkDevice logical_device, VkCommandPool command_pool, VkQueue queue)
+	{
 		vkEndCommandBuffer (command_buffer);
 
-		VkSubmitInfo submit_info{
+		VkSubmitInfo submit_info {
 			.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
 			.commandBufferCount = 1,
 			.pCommandBuffers = &command_buffer
 		};
-		vkQueueSubmit (graphics_queue, 1, &submit_info, VK_NULL_HANDLE);
-		vkQueueWaitIdle (graphics_queue);
+		vkQueueSubmit (queue, 1, &submit_info, VK_NULL_HANDLE);
 
-		vkFreeCommandBuffers(device, command_pool, 1, &command_buffer);
+		vkQueueWaitIdle (queue);
+
+		vkFreeCommandBuffers (logical_device, command_pool, 1, &command_buffer);
+	}
+	
+	void transitionImageLayout (VkDevice logical_device, VkCommandPool command_pool, VkQueue queue
+		,VkImage image, VkFormat format, VkImageLayout old_layout, VkImageLayout new_layout) 
+	{
+		auto command_buffer = beginSingleTimeCommands (logical_device, command_pool);
+
+		VkImageMemoryBarrier barrier {
+			.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+
+			.srcAccessMask = 0, // Later
+			.dstAccessMask = 0, // Later
+
+			.oldLayout = old_layout,
+			.newLayout = new_layout,
+			.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+			.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+			.image = image,
+			.subresourceRange = VkImageSubresourceRange {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .baseMipLevel = 0, .levelCount = 1, .baseArrayLayer = 0, .layerCount = 1},
+		};
+
+		VkPipelineStageFlags source_stage, destination_stage;
+		if (old_layout == VK_IMAGE_LAYOUT_UNDEFINED && new_layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
+		    barrier.srcAccessMask = 0;
+		    barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+		
+		    source_stage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+		    destination_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+		} else if (old_layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL && new_layout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
+		    barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+		    barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+		
+		    source_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+		    destination_stage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+		} else 
+		    THROW_Critical ("unsupported layout transition!");
+		
+
+		vkCmdPipelineBarrier (command_buffer
+			,source_stage, destination_stage
+			,0
+			,0, nullptr
+			,0, nullptr
+			,1, &barrier);
+
+		endSingleTimeCommands (command_buffer, logical_device, command_pool, queue);
+	}
+
+	void copyBuffer (VkImage& dst_image
+		,VkBuffer src_buffer, VkExtent2D size
+		,VkDevice device, VkCommandPool command_pool, VkQueue graphics_queue)
+	{
+		VkBufferImageCopy copy_region{
+			.bufferOffset = 0,
+			.bufferRowLength = 0,
+			.bufferImageHeight = 0,
+
+			.imageSubresource = VkImageSubresourceLayers{.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .mipLevel = 0, .baseArrayLayer = 0, .layerCount = 1},
+			
+			.imageOffset = {0,0,0},
+			.imageExtent = {size.width, size.height, 1}
+		};
+
+		transitionImageLayout (device, command_pool, graphics_queue
+			,dst_image, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+
+	    VkCommandBuffer command_buffer = beginSingleTimeCommands (device, command_pool);
+		vkCmdCopyBufferToImage (command_buffer, src_buffer, dst_image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy_region);
+		endSingleTimeCommands (command_buffer, device, command_pool, graphics_queue);
+
+		transitionImageLayout (device, command_pool, graphics_queue
+			,dst_image, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
 	}
 };

@@ -112,6 +112,9 @@ namespace MyApp {
 
 				VkDescriptorPool DescriptorPool;
 				VkDescriptorSet DescriptorSets [MAX_FRAMES_IN_FLIGHT];
+
+				VkImage TextureImage;
+				VkDeviceMemory TextureImageMemory;
 			} Extras;
 		} Vk;
 	};
