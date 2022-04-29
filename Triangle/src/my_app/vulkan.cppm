@@ -66,10 +66,10 @@ struct SwapChainSupportDetails {
 SwapChainSupportDetails query_swap_chain_support (VkPhysicalDevice device, VkSurfaceKHR surface);
 
 static MyApp::Vertex s_TriangleVertices[] = {
-	    {glm::vec2{-0.5, -0.5}, glm::vec3{1.0, 0.0, 1.0}}, // A  A+-----------+B	
-	    {glm::vec2{ 0.5, -0.5}, glm::vec3{0.0, 1.0, 1.0}}, // B   |           |  
-	    {glm::vec2{ 0.5,  0.5}, glm::vec3{1.0, 1.0, 0.0}}, // C  D+-----------+C
-	    {glm::vec2{-0.5,  0.5}, glm::vec3{1.0, 1.0, 1.0}}, // D
+	    {glm::vec2{-0.5, -0.5}, glm::vec3{1.0, 0.0, 1.0}, glm::vec2{1.0, 0.0}}, // A  A+-----------+B	
+	    {glm::vec2{ 0.5, -0.5}, glm::vec3{0.0, 1.0, 1.0}, glm::vec2{0.0, 0.0}}, // B   |           |  
+	    {glm::vec2{ 0.5,  0.5}, glm::vec3{1.0, 1.0, 0.0}, glm::vec2{0.0, 1.0}}, // C  D+-----------+C
+	    {glm::vec2{-0.5,  0.5}, glm::vec3{1.0, 1.0, 1.0}, glm::vec2{1.0, 1.0}}, // D
 	};
 
 static uint16_t s_TriangleIndices[] = {1, 3, 0, /**/ 2, 3, 1};
@@ -100,9 +100,9 @@ void MyApp::Instance::initializeVk () {
 
 	// Create shader modules	
 	m_Context.Vk.Modules.Vertex   = Helper::createShaderModule (m_Context.Vk.LogicalDevice, 
-			Helper::readFile (std::string() + PROJECT_ROOT_LOCATION + "/assets/2d_color-with-ubo/vert.sprv"));
+			Helper::readFile (std::string() + PROJECT_ROOT_LOCATION + "/assets/2d_color-with-texture/vert.sprv"));
 	m_Context.Vk.Modules.Fragment = Helper::createShaderModule (m_Context.Vk.LogicalDevice, 
-			Helper::readFile (std::string() + PROJECT_ROOT_LOCATION + "/assets/2d_color-with-ubo/frag.sprv"));
+			Helper::readFile (std::string() + PROJECT_ROOT_LOCATION + "/assets/2d_color-with-texture/frag.sprv"));
 
 	// Create command pool & buffer
 	Helper::createCommandPoolAndBuffer (m_Context.Vk.CommandPool, m_Context.Vk.CommandBuffers
@@ -200,8 +200,8 @@ void MyApp::Instance::render (double latency) {
 
 	{ // update uniform info
 		MyApp::UniformBufferObject ubo {
-			.model = glm::rotate(glm::mat4(1.0f), float(GetRenderTimestamp () * glm::radians(90.0)), glm::vec3(0.0f, 0.0f, 1.0f)),
-			.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f)),
+			.model = glm::scale(glm::rotate(glm::mat4(1.0f), float(GetRenderTimestamp () * glm::radians(90.0)), glm::vec3(0.0f, 0.0f, 1.0f)), glm::vec3(3)),
+			.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 4.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f)),
 			.projection = glm::perspective(glm::radians(45.0f), m_Context.Vk.SwapchainImageExtent.width / (float) m_Context.Vk.SwapchainImageExtent.height, 0.1f, 10.0f)
 		};
 		ubo.projection[1][1] *= -1; // inverting y axis
@@ -248,6 +248,8 @@ void MyApp::Instance::terminateVk () {
 	LOG_trace ("{:s}", __FUNCSIG__);
 	vkDeviceWaitIdle (m_Context.Vk.LogicalDevice);
 
+	vkDestroySampler (m_Context.Vk.LogicalDevice, m_Context.Vk.Extras.TextureSampler, nullptr);
+	vkDestroyImageView (m_Context.Vk.LogicalDevice, m_Context.Vk.Extras.TextureImageView, nullptr);
 	vkDestroyImage (m_Context.Vk.LogicalDevice, m_Context.Vk.Extras.TextureImage, nullptr);
 	vkFreeMemory (m_Context.Vk.LogicalDevice, m_Context.Vk.Extras.TextureImageMemory, nullptr);
 	vkDestroyBuffer (m_Context.Vk.LogicalDevice, m_Context.Vk.Extras.VertexBuffer, nullptr);
@@ -382,6 +384,13 @@ void MyApp::Instance::create_swapchain_and_related () {
 	}
 
 	{ // Create Discriptor set layout
+		VkDescriptorSetLayoutBinding sampler_layout_binding {
+			.binding = 1,
+			.descriptorType  = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+			.descriptorCount = 1,
+			.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+			.pImmutableSamplers = nullptr,
+		};
 		VkDescriptorSetLayoutBinding ubo_layout_binding {
 			.binding = 0,
 			.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
@@ -389,11 +398,13 @@ void MyApp::Instance::create_swapchain_and_related () {
 			.stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
 			.pImmutableSamplers = nullptr,
 		};
+		VkDescriptorSetLayoutBinding bindings[] = {ubo_layout_binding, sampler_layout_binding};
 		VkDescriptorSetLayoutCreateInfo layout_info {
 			.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-			.bindingCount = 1,
-			.pBindings = &ubo_layout_binding
+			.bindingCount = uint32_t (std::size (bindings)),
+			.pBindings = bindings,
 		};
+
 		if (vkCreateDescriptorSetLayout(m_Context.Vk.LogicalDevice, &layout_info, nullptr, &m_Context.Vk.DescriptorSetLayout) != VK_SUCCESS)
 		   THROW_Critical("failed to create descriptor set layout!");
 	}
@@ -418,15 +429,15 @@ void MyApp::Instance::create_swapchain_and_related () {
 		auto attribute_descriptions = Vertex::getAttributeDescriptions();
 		{
 			// Create discription pool
-			VkDescriptorPoolSize pool_size {
-				.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-				.descriptorCount = MAX_FRAMES_IN_FLIGHT
+			VkDescriptorPoolSize pool_sizes[] = {
+				{.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .descriptorCount = uint32_t (MAX_FRAMES_IN_FLIGHT)}, 
+				{.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = uint32_t (MAX_FRAMES_IN_FLIGHT)}
 			};
 			VkDescriptorPoolCreateInfo pool_info {
 				.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
 				.maxSets = MAX_FRAMES_IN_FLIGHT,
-				.poolSizeCount = 1,
-				.pPoolSizes = &pool_size
+				.poolSizeCount = uint32_t (std::size (pool_sizes)),
+				.pPoolSizes = pool_sizes,
 			};
 			if (vkCreateDescriptorPool (m_Context.Vk.LogicalDevice, &pool_info, nullptr, &m_Context.Vk.Extras.DescriptorPool) != VK_SUCCESS)
 				THROW_Critical ("failed to create descriptor pool");
@@ -452,18 +463,31 @@ void MyApp::Instance::create_swapchain_and_related () {
 					.offset = 0,
 					.range = sizeof(MyApp::UniformBufferObject)
 				};
-				VkWriteDescriptorSet descriptor_write{
+				VkDescriptorImageInfo image_info {
+					.sampler = m_Context.Vk.Extras.TextureSampler,
+					.imageView = m_Context.Vk.Extras.TextureImageView,
+					.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+				};
+
+				VkWriteDescriptorSet descriptor_writes[] = {{
 					.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
 					.dstSet = m_Context.Vk.Extras.DescriptorSets[i],
 					.dstBinding = 0,
 					.dstArrayElement = 0,
 					.descriptorCount = 1,
 					.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-					.pImageInfo = nullptr, // Optional
 					.pBufferInfo = &buffer_info,
-					.pTexelBufferView = nullptr // Optional
-				};
-				vkUpdateDescriptorSets(m_Context.Vk.LogicalDevice, 1, &descriptor_write, 0, nullptr);
+				}, {
+					.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+					.dstSet = m_Context.Vk.Extras.DescriptorSets[i],
+					.dstBinding = 1,
+					.dstArrayElement = 0,
+					.descriptorCount = 1,
+					.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+					.pImageInfo = &image_info,
+				}};
+
+				vkUpdateDescriptorSets(m_Context.Vk.LogicalDevice, uint32_t (std::size (descriptor_writes)), descriptor_writes, 0, nullptr);
 			}
 		}
 
@@ -479,7 +503,7 @@ void MyApp::Instance::create_swapchain_and_related () {
 			.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
 			.vertexBindingDescriptionCount = 1,
 			.pVertexBindingDescriptions = &binding_description, // Optional
-			.vertexAttributeDescriptionCount = 2,
+			.vertexAttributeDescriptionCount = uint32_t (std::size (attribute_descriptions)),
 			.pVertexAttributeDescriptions = attribute_descriptions.data () // Optional
 		};
 		VkPipelineInputAssemblyStateCreateInfo input_assembly_info {
@@ -579,7 +603,8 @@ void MyApp::Instance::create_buffers () {
 		}
 	}
 	{ // texture image
-		auto [image_data, tex_width, tex_height, tex_channels] = Helper::readImageRGBA ("C:/Users/Omen/Documents/MyExperiments/Vulkan/assets/textures/hatsune_miku.jpg");
+		// image loading
+		auto [image_data, tex_width, tex_height, tex_channels] = Helper::readImageRGBA (PROJECT_ROOT_LOCATION "/assets/textures/hatsune_miku.jpg");
 
 		VkDeviceSize buffer_size = tex_width * tex_height * 4;//tex_channels * sizeof(image_data[0]);
 
@@ -608,7 +633,53 @@ void MyApp::Instance::create_buffers () {
 
 		vkDestroyBuffer (m_Context.Vk.LogicalDevice, staging_buffer, nullptr);
 		vkFreeMemory (m_Context.Vk.LogicalDevice, staging_buffer_memory, nullptr);
-	} 
+
+		// image view for texture image
+		VkImageViewCreateInfo view_info {
+			.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+			.image = m_Context.Vk.Extras.TextureImage,
+			.viewType = VK_IMAGE_VIEW_TYPE_2D,
+			.format = VK_FORMAT_R8G8B8A8_SRGB,
+			.subresourceRange = {
+				.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, 
+				.baseMipLevel = 0, 
+				.levelCount = 1,
+				.baseArrayLayer = 0, 
+				.layerCount = 1 
+			}
+		};
+		if (vkCreateImageView (m_Context.Vk.LogicalDevice, &view_info, nullptr, &m_Context.Vk.Extras.TextureImageView) != VK_SUCCESS) 
+			THROW_Critical ("failed to create textureimage view!");
+		
+		// texture image sampler
+		VkPhysicalDeviceProperties properties{};
+		vkGetPhysicalDeviceProperties (m_Context.Vk.PhysicalDevice, &properties);
+		VkSamplerCreateInfo sampler_info {
+			.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+			.magFilter = VK_FILTER_LINEAR,
+			.minFilter = VK_FILTER_LINEAR,
+			.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
+
+			.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+			.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+			.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+
+			.mipLodBias = 0.0f,
+			.anisotropyEnable = VK_TRUE, // VK_FALSE
+			.maxAnisotropy = properties.limits.maxSamplerAnisotropy, // 1.0f
+
+			.compareEnable = VK_FALSE,
+			.compareOp = VK_COMPARE_OP_ALWAYS,
+
+			.minLod = 0.0f,
+			.maxLod = 0.0f,
+			.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK,
+			.unnormalizedCoordinates = VK_FALSE,
+		};
+
+		if (vkCreateSampler (m_Context.Vk.LogicalDevice, &sampler_info, nullptr, &m_Context.Vk.Extras.TextureSampler) != VK_SUCCESS) 
+			THROW_Critical ("failed to create texture sampler");
+	}
 }
 
 VKAPI_ATTR VkBool32 VKAPI_CALL vk_debug_callback (VkDebugUtilsMessageSeverityFlagBitsEXT message_severity
@@ -652,7 +723,7 @@ bool is_vk_device_suitable (VkPhysicalDevice device, void* surface_ptr) {
 	// We culd also implement a rating system for selecting most powerful GPU in system
 
 	VkPhysicalDeviceProperties device_properties;
-	VkPhysicalDeviceFeatures device_features;
+	VkPhysicalDeviceFeatures device_features {.samplerAnisotropy = VK_TRUE};
 
 	vkGetPhysicalDeviceProperties (device, &device_properties);
 	vkGetPhysicalDeviceFeatures (device, &device_features);
@@ -685,6 +756,7 @@ bool is_vk_device_suitable (VkPhysicalDevice device, void* surface_ptr) {
 	return true
 		&&	device_properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU
 		&&	device_features.geometryShader
+		&&	device_features.samplerAnisotropy
 		&&	indices.AreAllFamiliesPresent()
 		&&	extensions_supported
 		&&	swap_chain_adequate

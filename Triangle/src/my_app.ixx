@@ -16,6 +16,7 @@ namespace MyApp {
 	export struct Vertex {
 		glm::vec2 position;
 		glm::vec3 color;
+		glm::vec2 texCoord;
 
 		static constexpr VkVertexInputBindingDescription geBindingDiscription () {
 			return VkVertexInputBindingDescription {
@@ -37,6 +38,12 @@ namespace MyApp {
 					.binding = 0,
 					.format = VK_FORMAT_R32G32B32_SFLOAT,
 					.offset = offsetof(Vertex, color),
+				}, 
+				VkVertexInputAttributeDescription {
+					.location = 2,
+					.binding = 0,
+					.format = VK_FORMAT_R32G32_SFLOAT,
+					.offset = offsetof(Vertex, texCoord),
 				}
 			};
 		}
@@ -115,6 +122,9 @@ namespace MyApp {
 
 				VkImage TextureImage;
 				VkDeviceMemory TextureImageMemory;
+
+				VkImageView TextureImageView;
+				VkSampler TextureSampler;
 			} Extras;
 		} Vk;
 	};

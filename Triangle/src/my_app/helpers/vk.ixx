@@ -239,7 +239,7 @@ namespace Helper{
 			});
 		}
 
-		VkPhysicalDeviceFeatures device_features{};
+		VkPhysicalDeviceFeatures device_features {.samplerAnisotropy = VK_TRUE};
 		vkGetPhysicalDeviceFeatures (physical_device, &device_features);
 		
 		VkDeviceCreateInfo create_info{
