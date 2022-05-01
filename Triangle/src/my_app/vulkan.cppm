@@ -65,14 +65,14 @@ struct SwapChainSupportDetails {
 };
 SwapChainSupportDetails query_swap_chain_support (VkPhysicalDevice device, VkSurfaceKHR surface);
 
-static MyApp::Vertex s_TriangleVertices[] = {
+static MyApp::Vertex s_QuadVertices[] = {
 	    {glm::vec2{-0.5, -0.5}, glm::vec3{1.0, 0.0, 1.0}, glm::vec2{1.0, 0.0}}, // A  A+-----------+B	
 	    {glm::vec2{ 0.5, -0.5}, glm::vec3{0.0, 1.0, 1.0}, glm::vec2{0.0, 0.0}}, // B   |           |  
 	    {glm::vec2{ 0.5,  0.5}, glm::vec3{1.0, 1.0, 0.0}, glm::vec2{0.0, 1.0}}, // C  D+-----------+C
 	    {glm::vec2{-0.5,  0.5}, glm::vec3{1.0, 1.0, 1.0}, glm::vec2{1.0, 1.0}}, // D
 	};
 
-static uint16_t s_TriangleIndices[] = {1, 3, 0, /**/ 2, 3, 1};
+static uint16_t s_QuadIndices[] = {1, 3, 0, /**/ 2, 3, 1};
 
 void MyApp::Instance::initializeVk () {
 	LOG_trace(__FUNCSIG__); 
@@ -108,9 +108,6 @@ void MyApp::Instance::initializeVk () {
 	Helper::createCommandPoolAndBuffer (m_Context.Vk.CommandPool, m_Context.Vk.CommandBuffers
 		,m_Context.Vk.LogicalDevice, queue_family_indices.GraphicsFamily.value ());
 
-	create_buffers (); // uniform buffers needs to be created before creating descriptor sets and we also need command pool for transferring staged buffer to device local
-	create_swapchain_and_related ();
-
 	// Create syncronisation objects
 	VkSemaphoreCreateInfo semaphore_info { .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
 	VkFenceCreateInfo fence_info { 
@@ -125,6 +122,8 @@ void MyApp::Instance::initializeVk () {
 			THROW_Critical ("failed to create sync locks!");
 	}
 
+	create_buffers (); // uniform buffers needs to be created before creating descriptor sets and we also need command pool for transferring staged buffer to device local
+	create_swapchain_and_related ();
 }
 
 void MyApp::Instance::render (double latency) {
@@ -164,13 +163,12 @@ void MyApp::Instance::render (double latency) {
 	
 		vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphics_pipeline);
 
-		VkBuffer vertex_buffers[] = {vertex_buffer};
 		VkDeviceSize offsets[] = {0};
-		vkCmdBindVertexBuffers (command_buffer, 0, 1, vertex_buffers, offsets);
+		vkCmdBindVertexBuffers (command_buffer, 0, 1, &vertex_buffer, offsets);
 		vkCmdBindIndexBuffer (command_buffer, index_buffer, 0, VK_INDEX_TYPE_UINT16);
 		vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout, 0, 1, &descriptor_set, 0, nullptr);
 
- 		vkCmdDrawIndexed (command_buffer, std::size(s_TriangleIndices) /*no. of vertices*/, 1, 0, 0, 0);
+ 		vkCmdDrawIndexed (command_buffer, std::size(s_QuadIndices) /*no. of indices*/, 1, 0, 0, 0);
 
 		vkCmdEndRenderPass (command_buffer);
 
@@ -191,6 +189,7 @@ void MyApp::Instance::render (double latency) {
 	
 	vkResetFences (m_Context.Vk.LogicalDevice, 1, &m_Context.Vk.InFlightFences[current_frame_flight]);
 
+	// one should avoid re recording command buffers when possible
 	vkResetCommandBuffer(m_Context.Vk.CommandBuffers[current_frame_flight], 0);
 	record_command_buffer(m_Context.Vk.CommandBuffers[current_frame_flight]
 		,m_Context.Vk.GraphicsPipeline, m_Context.Vk.RenderPass, m_Context.Vk.SwapchainFramebuffers[image_index]
@@ -384,18 +383,18 @@ void MyApp::Instance::create_swapchain_and_related () {
 	}
 
 	{ // Create Discriptor set layout
-		VkDescriptorSetLayoutBinding sampler_layout_binding {
-			.binding = 1,
-			.descriptorType  = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-			.descriptorCount = 1,
-			.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
-			.pImmutableSamplers = nullptr,
-		};
 		VkDescriptorSetLayoutBinding ubo_layout_binding {
 			.binding = 0,
 			.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
 			.descriptorCount = 1,
 			.stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+			.pImmutableSamplers = nullptr,
+		};
+		VkDescriptorSetLayoutBinding sampler_layout_binding {
+			.binding = 1,
+			.descriptorType  = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+			.descriptorCount = 1,
+			.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
 			.pImmutableSamplers = nullptr,
 		};
 		VkDescriptorSetLayoutBinding bindings[] = {ubo_layout_binding, sampler_layout_binding};
@@ -424,9 +423,6 @@ void MyApp::Instance::create_swapchain_and_related () {
 		};
 		VkPipelineShaderStageCreateInfo shader_stages[] = {vert_shader_stage_info, frag_shader_stage_info};
 		
-		// vertex discription
-		auto binding_description = Vertex::geBindingDiscription();
-		auto attribute_descriptions = Vertex::getAttributeDescriptions();
 		{
 			// Create discription pool
 			VkDescriptorPoolSize pool_sizes[] = {
@@ -498,7 +494,11 @@ void MyApp::Instance::create_swapchain_and_related () {
 			.pushConstantRangeCount = 0, // Optional
 			.pPushConstantRanges = nullptr, // Optional
 		};
-			
+		
+		// vertex discription
+		auto binding_description = Vertex::getBindingDiscription();
+		auto attribute_descriptions = Vertex::getAttributeDescriptions();
+	
 		VkPipelineVertexInputStateCreateInfo vertex_input_info {
 			.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
 			.vertexBindingDescriptionCount = 1,
@@ -541,7 +541,7 @@ void MyApp::Instance::recreate_swapchain_and_related () {
 
 void MyApp::Instance::create_buffers () {
 	{ // vertex buffer for triangles
-		VkDeviceSize buffer_size = sizeof(s_TriangleVertices);
+		VkDeviceSize buffer_size = sizeof(s_QuadVertices);
 
 		VkBuffer staging_buffer;
 		VkDeviceMemory staging_buffer_memory;
@@ -551,9 +551,9 @@ void MyApp::Instance::create_buffers () {
 		
 		void* staging_buffer_ptr = nullptr;
 		vkMapMemory (m_Context.Vk.LogicalDevice, staging_buffer_memory, 0, buffer_size, 0, &staging_buffer_ptr);
-		memcpy (staging_buffer_ptr, s_TriangleVertices, buffer_size);
+		memcpy (staging_buffer_ptr, s_QuadVertices, buffer_size);
 		vkUnmapMemory(m_Context.Vk.LogicalDevice, staging_buffer_memory);
-		// memcpy_s (buffer_ptr, alloc_info.allocationSize, s_TriangleVertices, sizeof(s_TriangleVertices)); // bug in microsoft stl header units
+		// memcpy_s (buffer_ptr, alloc_info.allocationSize, s_QuadVertices, sizeof(s_QuadVertices)); // bug in microsoft stl header units
 
 		Helper::createBuffer (m_Context.Vk.Extras.VertexBuffer, m_Context.Vk.Extras.VertexBufferMemory
 			,m_Context.Vk.LogicalDevice, m_Context.Vk.PhysicalDevice, buffer_size
@@ -567,7 +567,7 @@ void MyApp::Instance::create_buffers () {
 		vkFreeMemory (m_Context.Vk.LogicalDevice, staging_buffer_memory, nullptr);
 	}
 	{ // index buffer for triangles
-		VkDeviceSize buffer_size = sizeof(s_TriangleIndices);
+		VkDeviceSize buffer_size = sizeof(s_QuadIndices);
 
 		VkBuffer staging_buffer;
 		VkDeviceMemory staging_buffer_memory;
@@ -577,9 +577,9 @@ void MyApp::Instance::create_buffers () {
 		
 		void* staging_buffer_ptr = nullptr;
 		vkMapMemory (m_Context.Vk.LogicalDevice, staging_buffer_memory, 0, buffer_size, 0, &staging_buffer_ptr);
-		memcpy (staging_buffer_ptr, s_TriangleIndices, buffer_size);
+		memcpy (staging_buffer_ptr, s_QuadIndices, buffer_size);
 		vkUnmapMemory(m_Context.Vk.LogicalDevice, staging_buffer_memory);
-		// memcpy_s (buffer_ptr, alloc_info.allocationSize, s_TriangleVertices, sizeof(s_TriangleVertices)); // bug in microsoft stl header units
+		// memcpy_s (buffer_ptr, alloc_info.allocationSize, s_QuadVertices, sizeof(s_QuadVertices)); // bug in microsoft stl header units
 
 		Helper::createBuffer (m_Context.Vk.Extras.IndexBuffer, m_Context.Vk.Extras.IndexBufferMemory
 			,m_Context.Vk.LogicalDevice, m_Context.Vk.PhysicalDevice, buffer_size
@@ -618,7 +618,7 @@ void MyApp::Instance::create_buffers () {
 		vkMapMemory (m_Context.Vk.LogicalDevice, staging_buffer_memory, 0, buffer_size, 0, &staging_buffer_ptr);
 		memcpy (staging_buffer_ptr, image_data, buffer_size);
 		vkUnmapMemory(m_Context.Vk.LogicalDevice, staging_buffer_memory);
-		// memcpy_s (buffer_ptr, alloc_info.allocationSize, s_TriangleVertices, sizeof(s_TriangleVertices)); // bug in microsoft stl header units
+		// memcpy_s (buffer_ptr, alloc_info.allocationSize, s_QuadVertices, sizeof(s_QuadVertices)); // bug in microsoft stl header units
 
 		Helper::freeImage (image_data);
 
