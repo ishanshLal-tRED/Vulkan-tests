@@ -1,8 +1,9 @@
 {
-    "name": "vulkantriangle",
+    "name": "vulkan-examples",
     "version-string": "0.0.1alpha",
     "dependencies": [
         "boost",
+        "fmt",
         "glm",
         "spdlog",
         "glfw3",
@@ -10,6 +11,6 @@
             "name": "imgui",
             "features": [ "vulkan-binding", "glfw-binding", "docking-experimental" ]
         },
-        "fmt"
+        "nlohmann-json"
     ]
 }
